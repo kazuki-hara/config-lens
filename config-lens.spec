@@ -5,6 +5,7 @@ PyInstallerビルド設定ファイル
 移動可能なmacOSアプリケーションバンドルを生成します。
 """
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT, BUNDLE
 from pathlib import Path
 import sys
 import re
