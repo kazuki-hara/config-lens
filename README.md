@@ -1,0 +1,1 @@
+/Users/kazuki/Development/01_network/01_config-lens/.venv/lib/python3.14/site-packages
