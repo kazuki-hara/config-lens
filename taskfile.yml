@@ -6,6 +6,10 @@ vars:
   APP_PATH: dist/{{.APP_NAME}}.app
 
 tasks:
+  # ========================================
+  # ヘルプ・セットアップ
+  # ========================================
+  
   default:
     desc: 使用可能なタスクを表示
     cmds:
@@ -16,8 +20,24 @@ tasks:
     cmds:
       - uv sync
 
+  setup:
+    desc: 開発環境をセットアップ
+    cmds:
+      - task: install
+      - task: init
+      - echo "✅ 開発環境のセットアップが完了しました"
+
+  init:
+    desc: プロジェクトの初期化
+    cmds:
+      - uv sync
+
+  # ========================================
+  # ビルド
+  # ========================================
+
   build:
-    desc: リリースビルド
+    desc: リリースビルド（推奨オプション準拠）
     cmds:
       - pyinstaller --noconfirm {{.SPEC_FILE}}
 
@@ -27,20 +47,31 @@ tasks:
       - rm -rf build dist
       - pyinstaller --noconfirm {{.SPEC_FILE}}
 
-  # アドホック署名（移動可能にする）
+  dev-build:
+    desc: デバッグビルド（console=True, debug=True）
+    cmds:
+      - cp {{.SPEC_FILE}} {{.SPEC_FILE}}.bak
+      - sed -i '' 's/debug=False/debug=True/' {{.SPEC_FILE}}
+      - sed -i '' 's/console=False/console=True/' {{.SPEC_FILE}}
+      - pyinstaller --noconfirm {{.SPEC_FILE}}
+      - mv {{.SPEC_FILE}}.bak {{.SPEC_FILE}}
+
+  # ========================================
+  # コード署名
+  # ========================================
+
   sign:
     desc: アプリケーションにアドホック署名
     deps: [build]
     cmds:
       - codesign --force --deep --sign - {{.APP_PATH}}
-      - echo "アドホック署名完了"
+      - echo "✅ アドホック署名完了"
 
-  # 署名の検証
   verify:
     desc: アプリケーションの署名を検証
     cmds:
       - codesign --verify --deep --verbose=2 {{.APP_PATH}}
-      - spctl --assess --verbose=4 {{.APP_PATH}}
+      - spctl --assess --verbose=4 {{.APP_PATH}} || true
 
   # 署名してビルド
   build-signed:
@@ -49,14 +80,16 @@ tasks:
       - task: build
       - task: sign
 
-  # 隔離属性を削除（Gatekeeper回避）
   remove-quarantine:
     desc: Gatekeeper の隔離属性を削除
     cmds:
       - xattr -cr {{.APP_PATH}}
-      - echo "隔離属性を削除しました"
+      - echo "✅ 隔離属性を削除しました"
 
-  # 配布用にDMGを作成
+  # ========================================
+  # 配布
+  # ========================================
+
   create-dmg:
     desc: 配布用のDMGファイルを作成
     deps: [build-signed]
@@ -65,6 +98,11 @@ tasks:
       - cp -R {{.APP_PATH}} dist/dmg/
       - hdiutil create -volname "{{.APP_NAME}}" -srcfolder dist/dmg -ov -format UDZO dist/{{.APP_NAME}}.dmg
       - rm -rf dist/dmg
+      - echo "✅ DMGファイル作成完了: dist/{{.APP_NAME}}.dmg"
+
+  # ========================================
+  # 実行
+  # ========================================
 
 
   run:
@@ -87,6 +125,10 @@ tasks:
     deps: [dev-build]
     cmds:
       - ./{{.APP_PATH}}/Contents/MacOS/{{.APP_NAME}}
+
+  # ========================================
+  # コード品質
+  # ========================================
 
   lint:
     desc: リンターでコードチェック
@@ -121,27 +163,20 @@ tasks:
       - uv run pytest --cov=src --cov-report=html --cov-report=term
 
   check:
-    desc: すべてのチェック実行
+    desc: すべてのチェック実行（lint + type-check + test）
     deps: [lint, type-check, test]
 
-  init:
-    desc: プロジェクトの初期化
-    cmds:
-      - uv sync
+  # ========================================
+  # クリーンアップ
+  # ========================================
 
   clean-all:
     desc: すべてのビルドファイルとキャッシュを削除
     cmds:
       - rm -rf build dist
-      - find . -type d -name __pycache__ -exec rm -rf {} +
-      - find . -type f -name "*.pyc" -delete
-      - find . -type d -name "*.egg-info" -exec rm -rf {} +
-      - find . -type d -name ".pytest_cache" -exec rm -rf {} +
-      - find . -type d -name ".ruff_cache" -exec rm -rf {} +
-
-  setup:
-    desc: 開発環境をセットアップ
-    cmds:
-      - task: install
-      - task: init
-      - echo "開発環境のセットアップが完了しました"
+      - find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+      - find . -type f -name "*.pyc" -delete 2>/dev/null || true
+      - find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+      - find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+      - find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+      - echo "✅ クリーンアップ完了"

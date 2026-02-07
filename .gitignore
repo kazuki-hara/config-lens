@@ -14,5 +14,17 @@ uv.lock
 # Virtual environments
 .venv
 
+# PyInstaller
+*.spec.bak
+config-lens-*.log
+
 # macOS files
 .DS_Store
+*.dmg
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
