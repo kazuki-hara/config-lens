@@ -1,5 +1,6 @@
 import pytest
 from src.services.cisco_config import CiscoConfigService
+from pprint import pprint
 
 
 class TestCiscoConfigService:
@@ -9,6 +10,13 @@ class TestCiscoConfigService:
 
     def test_platform_property(self, cisco_service: CiscoConfigService) -> None:
         assert cisco_service.platform is not None
+
+    def test_read_config_readlines(self, cisco_service: CiscoConfigService) -> None:
+        lines = cisco_service.read_config_readlines(
+            "tests/fixtures/cisco_running-config_default.txt"
+        )
+        assert isinstance(lines, list)
+        assert len(lines) > 0
 
     def test_read_config(self, cisco_service: CiscoConfigService) -> None:
         config = cisco_service.read_config(
@@ -30,3 +38,16 @@ class TestCiscoConfigService:
         diff = cisco_service.get_config_diff(config_a, config_b)
         assert isinstance(diff, list)
         assert len(diff) > 0
+
+    def test_get_config_paths(self, cisco_service: CiscoConfigService) -> None:
+        config = cisco_service.read_config(
+            "tests/fixtures/cisco_add.txt"
+        )
+        cisco_service.get_config_paths(config)
+
+        config = cisco_service.read_config_readlines(
+            "tests/fixtures/cisco_add.txt"
+        )
+        paths = cisco_service.get_config_paths(config)
+
+        

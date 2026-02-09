@@ -16,7 +16,7 @@ def setup_application_path() -> Path:
     if getattr(sys, 'frozen', False):
         # PyInstallerでバンドルされている場合
         # sys._MEIPASSは一時展開ディレクトリを指す
-        application_path = Path(sys._MEIPASS)
+        application_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
         
         # 実行可能ファイルのパス（移動先のパス）
         executable_path = Path(sys.executable).parent
@@ -43,7 +43,7 @@ def main() -> None:
     
     try:
         # パス設定
-        app_path = setup_application_path()
+        _ = setup_application_path()
         
         # 環境情報の表示
         print(f"[INFO] Python version: {sys.version}")
