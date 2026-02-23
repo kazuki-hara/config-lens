@@ -77,9 +77,6 @@ jobs:
       - name: Build (macOS)
         run: task build:mac
 
-      - name: Sign app (ad-hoc)
-        run: codesign --sign - --deep --force --preserve-metadata=entitlements dist/ConfigLens.app
-
       - name: Archive macOS app
         run: zip -ry ConfigLens-mac.zip dist/ConfigLens.app
 
