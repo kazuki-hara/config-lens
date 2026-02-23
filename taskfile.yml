@@ -39,7 +39,7 @@ tasks:
     vars:
       # アイコンファイルが存在する場合のみ --icon フラグを付与する
       ICON_FLAG:
-        sh: 'if exist assets\icon.ico (echo --icon assets\icon.ico) else (echo.)'
+        sh: 'if (Test-Path assets/icon.ico) { echo "--icon assets/icon.ico" } else { echo "" }'
     cmds:
       - uv run pyinstaller
           --onefile
