@@ -18,7 +18,7 @@ class NavigationFrame(ctk.CTkFrame):
 
     def __init__(
         self,
-        parent: ctk.CTkBaseClass,
+        parent: ctk.CTk | ctk.CTkBaseClass,
         on_compare: Callable[[], None],
     ) -> None:
         """初期化。

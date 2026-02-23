@@ -43,7 +43,7 @@ class CompareView(ctk.CTkFrame):
 
     def __init__(
         self,
-        parent: ctk.CTkBaseClass,
+        parent: ctk.CTk | ctk.CTkBaseClass,
         settings: AppSettings,
     ) -> None:
         super().__init__(parent, corner_radius=0, fg_color="transparent")
