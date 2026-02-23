@@ -61,7 +61,7 @@ class NavigationFrame(ctk.CTkFrame):
         # 比較ボタン（アクティブ状態で表示）
         self._nav_compare_btn = ctk.CTkButton(
             self,
-            text="Compare Config Files",
+            text="Text Diff Viewer",
             anchor="w",
             fg_color="#1f538d",
             hover_color="#2a6db5",

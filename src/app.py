@@ -24,7 +24,7 @@ class DiffViewerApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
 
-        self.title("Config Lens - Text Diff Viewer")
+        self.title("Config Lens")
         self.geometry("1400x800")
 
         # アプリ共有設定
