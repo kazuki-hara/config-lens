@@ -37,7 +37,13 @@ uv sync --all-groups
 
 1. `ConfigLens-mac.zip` をダウンロードして展開する
 2. `ConfigLens.app` をアプリケーションフォルダに移動する
-3. 初回起動時は右クリック → **開く** を選択する（セキュリティ警告をバイパス）
+3. 初回起動時は **右クリック（または Control+クリック）→ 開く** を選択する
+4. 「開発元を確認できません」という警告が表示されたら **開く** をクリックする
+
+> **補足**: ターミナルで以下を実行してからダブルクリックで起動することもできます。
+> ```bash
+> xattr -d com.apple.quarantine /Applications/ConfigLens.app
+> ```
 
 ### Windows
 
