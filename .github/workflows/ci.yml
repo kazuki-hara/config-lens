@@ -1,0 +1,191 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # ──────────────────────────────────────────────
+  # テスト & リント
+  # ──────────────────────────────────────────────
+  test-lint:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: "3.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run tests
+        run: task test
+
+      - name: Run lint
+        run: task lint
+
+  # ──────────────────────────────────────────────
+  # macOS ビルド
+  # ──────────────────────────────────────────────
+  build-mac:
+    name: Build (macOS)
+    runs-on: macos-latest
+    needs: test-lint
+    # push to main のみビルドを実行（PR ではスキップ）
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: "3.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build (macOS)
+        run: task build:mac
+
+      - name: Archive macOS app
+        run: zip -r ConfigLens-mac.zip dist/ConfigLens.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConfigLens-mac
+          path: ConfigLens-mac.zip
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────
+  # Windows ビルド
+  # ──────────────────────────────────────────────
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    needs: test-lint
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: "3.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build (Windows)
+        run: task build:win
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConfigLens-windows
+          path: dist/ConfigLens.exe
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────
+  # GitHub Release 登録
+  # ──────────────────────────────────────────────
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [build-mac, build-windows]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ConfigLens-mac
+          path: release-assets/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ConfigLens-windows
+          path: release-assets/
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: ConfigLens ${{ steps.get_version.outputs.version }}
+          body: |
+            ## ダウンロード
+
+            | ファイル | 対象 OS |
+            |---|---|
+            | `ConfigLens-mac.zip` | macOS |
+            | `ConfigLens.exe` | Windows |
+
+            ## インストール方法
+
+            ### macOS
+            1. `ConfigLens-mac.zip` をダウンロードして展開する
+            2. `ConfigLens.app` をアプリケーションフォルダに移動する
+            3. 初回起動時は右クリック → 開く を選択する
+
+            ### Windows
+            1. `ConfigLens.exe` をダウンロードする
+            2. ダブルクリックして起動する
+
+            ---
+            *このリリースは main ブランチへのコミット `${{ github.sha }}` から自動生成されました。*
+          make_latest: true
+          files: |
+            release-assets/ConfigLens-mac.zip
+            release-assets/ConfigLens.exe

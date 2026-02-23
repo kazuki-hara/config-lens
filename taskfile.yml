@@ -1,0 +1,83 @@
+version: "3"
+
+vars:
+  APP_NAME: ConfigLens
+  MAIN: main.py
+
+tasks:
+  # ──────────────────────────────────────────────
+  # アイコン生成
+  # ──────────────────────────────────────────────
+  icon:generate:
+    desc: "プレースホルダーアイコンを生成する"
+    cmds:
+      - uv run python scripts/generate_icon.py
+
+  # ──────────────────────────────────────────────
+  # ビルド
+  # ──────────────────────────────────────────────
+  build:mac:
+    desc: "macOS 向けに .app バンドル形式でビルドする（ターミナル非表示）"
+    platforms: [darwin]
+    vars:
+      # アイコンファイルが存在する場合のみ --icon フラグを付与する
+      ICON_FLAG:
+        sh: '[ -f assets/icon.icns ] && echo "--icon assets/icon.icns" || echo ""'
+    cmds:
+      - uv run pyinstaller
+          --onedir
+          --windowed
+          --noconfirm
+          --name "{{.APP_NAME}}"
+          {{.ICON_FLAG}}
+          --collect-all customtkinter
+          {{.MAIN}}
+
+  build:win:
+    desc: "Windows 向けに one-file 形式でビルドする"
+    platforms: [windows]
+    vars:
+      # アイコンファイルが存在する場合のみ --icon フラグを付与する
+      ICON_FLAG:
+        sh: 'if exist assets\icon.ico (echo --icon assets\icon.ico) else (echo.)'
+    cmds:
+      - uv run pyinstaller
+          --onefile
+          --windowed
+          --noconfirm
+          --name "{{.APP_NAME}}"
+          {{.ICON_FLAG}}
+          --collect-all customtkinter
+          {{.MAIN}}
+
+  build:
+    desc: "現在の OS に合わせてビルドする（build:mac / build:win を自動選択）"
+    cmds:
+      - task: build:{{OS}}
+
+  # ──────────────────────────────────────────────
+  # クリーン
+  # ──────────────────────────────────────────────
+  clean:
+    desc: "PyInstaller のビルド成果物を削除する"
+    cmds:
+      - rm -rf build dist *.spec
+
+  # ──────────────────────────────────────────────
+  # 開発
+  # ──────────────────────────────────────────────
+  run:
+    desc: "アプリを直接実行する（開発用）"
+    cmds:
+      - uv run python {{.MAIN}}
+
+  test:
+    desc: "テストを実行する"
+    cmds:
+      - uv run pytest
+
+  lint:
+    desc: "ruff でリントと型チェックを実行する"
+    cmds:
+      - uv run ruff check src tests
+      - uv run pyright src
