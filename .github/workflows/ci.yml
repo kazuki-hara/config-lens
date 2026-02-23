@@ -72,7 +72,22 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: uv sync --all-groups
+        run: uv sync
+
+      - name: Generate icon (macOS)
+        run: |
+          mkdir -p assets/icon.iconset
+          sips -z 16   16   assets/icon.png --out assets/icon.iconset/icon_16x16.png
+          sips -z 32   32   assets/icon.png --out assets/icon.iconset/icon_16x16@2x.png
+          sips -z 32   32   assets/icon.png --out assets/icon.iconset/icon_32x32.png
+          sips -z 64   64   assets/icon.png --out assets/icon.iconset/icon_32x32@2x.png
+          sips -z 128  128  assets/icon.png --out assets/icon.iconset/icon_128x128.png
+          sips -z 256  256  assets/icon.png --out assets/icon.iconset/icon_128x128@2x.png
+          sips -z 256  256  assets/icon.png --out assets/icon.iconset/icon_256x256.png
+          sips -z 512  512  assets/icon.png --out assets/icon.iconset/icon_256x256@2x.png
+          sips -z 512  512  assets/icon.png --out assets/icon.iconset/icon_512x512.png
+          sips -z 1024 1024 assets/icon.png --out assets/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
       - name: Build (macOS)
         run: task build:mac
@@ -115,7 +130,15 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: uv sync --all-groups
+        run: uv sync
+
+      - name: Generate icon (Windows)
+        run: |
+          uv run --with pillow python -c "
+          from PIL import Image
+          img = Image.open('assets/icon.png').convert('RGBA')
+          img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+          "
 
       - name: Build (Windows)
         run: task build:win
@@ -146,6 +169,52 @@ jobs:
         run: |
           VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_bare=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          python3 - <<'EOF'
+          import re, os
+
+          version = os.environ["VERSION"]
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+
+          # 該当バージョンのセクションを抽出（次の ## まで）
+          pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
+          m = re.search(pattern, content, re.DOTALL)
+          notes = m.group(1).strip() if m else "_このバージョンのリリースノートはありません。_"
+
+          body = f"""{notes}
+
+          ---
+
+          ## ダウンロード
+
+          | ファイル | 対象 OS |
+          |---|---|
+          | `ConfigLens-mac.zip` | macOS |
+          | `ConfigLens.exe` | Windows |
+
+          ## インストール方法
+
+          ### macOS
+          1. `ConfigLens-mac.zip` をダウンロードして展開する
+          2. `ConfigLens.app` をアプリケーションフォルダに移動する
+          3. 初回起動時は **右クリック（または Control+クリック）→ 開く** を選択する
+          4. 「開発元を確認できません」という警告が表示されたら **開く** をクリックする
+
+          ### Windows
+          1. `ConfigLens.exe` をダウンロードする
+          2. ダブルクリックして起動する
+          """
+
+          with open("release_body.md", "w") as f:
+              f.write(body)
+          EOF
+        env:
+          VERSION: ${{ steps.get_version.outputs.version_bare }}
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
@@ -164,27 +233,7 @@ jobs:
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: ConfigLens ${{ steps.get_version.outputs.version }}
-          body: |
-            ## ダウンロード
-
-            | ファイル | 対象 OS |
-            |---|---|
-            | `ConfigLens-mac.zip` | macOS |
-            | `ConfigLens.exe` | Windows |
-
-            ## インストール方法
-
-            ### macOS
-            1. `ConfigLens-mac.zip` をダウンロードして展開する
-            2. `ConfigLens.app` をアプリケーションフォルダに移動する
-            3. 初回起動時は右クリック → 開く を選択する
-
-            ### Windows
-            1. `ConfigLens.exe` をダウンロードする
-            2. ダブルクリックして起動する
-
-            ---
-            *このリリースは main ブランチへのコミット `${{ github.sha }}` から自動生成されました。*
+          body_path: release_body.md
           make_latest: true
           files: |
             release-assets/ConfigLens-mac.zip
