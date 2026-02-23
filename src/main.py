@@ -1,4 +1,5 @@
 import difflib
+import re
 import tkinter as tk
 from tkinter import filedialog
 import customtkinter as ctk
@@ -6,8 +7,10 @@ from hier_config import Platform
 
 try:
     from src.diff import TextAlignedDiffComparator
+    from src.ignore import IgnorePatternManager
 except ModuleNotFoundError:
     from diff import TextAlignedDiffComparator
+    from ignore import IgnorePatternManager
 
 # 文字単位インライン差分の設定
 _INLINE_DIFF_THRESHOLD: float = 0.4  # ペアリングに必要な最低類似度
@@ -54,6 +57,11 @@ class DiffViewerApp(ctk.CTk):
         # 現在アクティブなreorder強調表示の行番号（1ベース）
         self._active_src_row: int = -1
         self._active_tgt_row: int = -1
+
+        # Ignore機能
+        self._ignore_manager: IgnorePatternManager = IgnorePatternManager()
+        self._ignore_enabled_var: tk.BooleanVar = tk.BooleanVar(value=True)
+        self._ignore_dialog: "IgnorePatternDialog | None" = None
 
         # UIの構築
         self._create_widgets()
@@ -130,6 +138,26 @@ class DiffViewerApp(ctk.CTk):
             hover_color="darkgreen"
         )
         compare_button.pack(side="left", padx=10)
+
+        # Ignoreパターン管理ボタン + 有効/無効トグル
+        ignore_frame = ctk.CTkFrame(top_frame)
+        ignore_frame.pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            ignore_frame,
+            text="Ignoreパターン管理",
+            command=self._open_ignore_dialog,
+            width=160,
+        ).pack(side="left", padx=(5, 8))
+
+        self._ignore_switch = ctk.CTkSwitch(
+            ignore_frame,
+            text="Ignore有効",
+            variable=self._ignore_enabled_var,
+            onvalue=True,
+            offvalue=False,
+        )
+        self._ignore_switch.pack(side="left", padx=5)
 
         # メインフレーム（テキスト表示エリア）
         main_frame = ctk.CTkFrame(self)
@@ -248,7 +276,17 @@ class DiffViewerApp(ctk.CTk):
             "insert_char", background="#006400", foreground="#ffffff"
         )
 
-        # タグの優先順位: reorder_active > reorder > delete_char/insert_char > delete/insert > empty
+        # Ignore行（差分があっても検知対象外とした行）
+        for widget in (self.source_text, self.target_text):
+            widget.tag_configure(
+                "ignore",
+                background="#2f2f2f",
+                foreground="#5a5a5a",
+            )
+
+        # タグ優先順位:
+        #   reorder_active > delete_char/insert_char
+        #   > ignore > reorder > delete/insert > empty
         for widget in (self.source_text, self.target_text):
             widget.tag_raise("reorder_active")
         self.source_text.tag_raise("delete_char")
@@ -277,6 +315,21 @@ class DiffViewerApp(ctk.CTk):
                     f"{tgt_row}.{j1 + _LINE_NUM_WIDTH}",
                     f"{tgt_row}.{j2 + _LINE_NUM_WIDTH}",
                 )
+
+    def _open_ignore_dialog(self) -> None:
+        """Ignoreパターン管理ダイアログを開く。
+
+        既に開いている場合は前面に移動する。
+        """
+        if (
+            self._ignore_dialog is not None
+            and self._ignore_dialog.winfo_exists()
+        ):
+            self._ignore_dialog.lift()
+            return
+        self._ignore_dialog = IgnorePatternDialog(
+            self, self._ignore_manager
+        )
 
     def _on_scroll(self, *args) -> None:
         """スクロールを同期"""
@@ -432,6 +485,19 @@ class DiffViewerApp(ctk.CTk):
             self._active_src_row = -1
             self._active_tgt_row = -1
 
+            # Ignore処理：パターンにマッチした行を差分タイプから除外
+            if (
+                self._ignore_enabled_var.get()
+                and self._ignore_manager.get_patterns()
+            ):
+                for i, (sl, tl) in enumerate(
+                    zip(source_lines, target_lines)
+                ):
+                    active = sl if sl else tl
+                    if active and self._ignore_manager.matches(active):
+                        src_types[i] = "ignore"
+                        tgt_types[i] = "ignore"
+
             # reorder行のキー → 行番号マッピングを構築
             self._src_key_to_row = {
                 src_keys[i]: i + 1
@@ -514,16 +580,150 @@ class DiffViewerApp(ctk.CTk):
             delete_count = src_types.count("delete")
             insert_count = tgt_types.count("insert")
             reorder_count = src_types.count("reorder")
+            ignore_count = src_types.count("ignore")
 
+            ignore_info = (
+                f", Ignore: {ignore_count}行" if ignore_count else ""
+            )
             self.status_bar.configure(
                 text=f"比較完了 - 削除: {delete_count}行, "
                 f"追加: {insert_count}行, "
-                f"順番違い: {reorder_count}行 "
+                f"順番違い: {reorder_count}行"
+                f"{ignore_info} "
                 f"（順番違いの行はクリックで対応行へジャンプ）"
             )
 
         except Exception as e:
             self.status_bar.configure(text=f"エラー: {e!s}")
+
+
+class IgnorePatternDialog(ctk.CTkToplevel):
+    """Ignoreパターンを管理するダイアログウィンドウ。
+
+    登録済みパターンの一覧表示・追加・削除を行う。
+    設定はOS標準のユーザーデータディレクトリに自動保存される。
+    """
+
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        manager: IgnorePatternManager,
+    ) -> None:
+        super().__init__(parent)
+        self._manager = manager
+        self.title("Ignoreパターン管理")
+        self.geometry("560x440")
+        self.resizable(True, True)
+        self.transient(parent)
+        self.grab_set()
+        self._create_widgets()
+
+    def _create_widgets(self) -> None:
+        """ウィジェットを構築する。"""
+        # 追加エリア
+        add_frame = ctk.CTkFrame(self)
+        add_frame.pack(fill="x", padx=10, pady=10)
+
+        ctk.CTkLabel(
+            add_frame, text="正規表現:"
+        ).pack(side="left", padx=(5, 2))
+
+        self._entry = ctk.CTkEntry(
+            add_frame,
+            placeholder_text="例: ^!.*  /  ^Building.*  /  NTP.*",
+        )
+        self._entry.pack(side="left", expand=True, fill="x", padx=5)
+        self._entry.bind("<Return>", lambda _: self._add_pattern())
+
+        ctk.CTkButton(
+            add_frame,
+            text="追加",
+            command=self._add_pattern,
+            width=70,
+        ).pack(side="left", padx=5)
+
+        # エラーラベル
+        self._error_label = ctk.CTkLabel(
+            self, text="", text_color="#ff6b6b"
+        )
+        self._error_label.pack(pady=(0, 4))
+
+        # パターンリスト（スクロール可能）
+        self._list_frame = ctk.CTkScrollableFrame(
+            self, label_text="登録済みパターン"
+        )
+        self._list_frame.pack(
+            fill="both", expand=True, padx=10, pady=(0, 8)
+        )
+
+        # 設定ファイルパス表示
+        path_text = f"設定: {self._manager.settings_path}"
+        ctk.CTkLabel(
+            self,
+            text=path_text,
+            font=ctk.CTkFont(size=10),
+            text_color="#888888",
+        ).pack(pady=(0, 6))
+
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        """パターンリストを再描画する。"""
+        for widget in self._list_frame.winfo_children():
+            widget.destroy()
+
+        patterns = self._manager.get_patterns()
+        if not patterns:
+            ctk.CTkLabel(
+                self._list_frame,
+                text="登録済みパターンはありません",
+                text_color="#666666",
+            ).pack(pady=10)
+            return
+
+        for pattern in patterns:
+            row = ctk.CTkFrame(self._list_frame)
+            row.pack(fill="x", pady=2, padx=2)
+
+            ctk.CTkLabel(
+                row,
+                text=pattern,
+                anchor="w",
+                font=ctk.CTkFont(family="Courier", size=11),
+            ).pack(side="left", expand=True, fill="x", padx=8)
+
+            ctk.CTkButton(
+                row,
+                text="削除",
+                width=55,
+                fg_color="#6b2020",
+                hover_color="#8b0000",
+                command=lambda p=pattern: self._remove_pattern(p),
+            ).pack(side="right", padx=5, pady=3)
+
+    def _add_pattern(self) -> None:
+        """入力欄のパターンを追加する。"""
+        pattern = self._entry.get()
+        try:
+            self._manager.add_pattern(pattern)
+            self._entry.delete(0, "end")
+            self._error_label.configure(text="")
+            self._refresh_list()
+        except re.error as e:
+            self._error_label.configure(
+                text=f"正規表現エラー: {e}"
+            )
+        except ValueError as e:
+            self._error_label.configure(text=str(e))
+
+    def _remove_pattern(self, pattern: str) -> None:
+        """指定パターンを削除する。
+
+        Args:
+            pattern: 削除するパターン文字列
+        """
+        self._manager.remove_pattern(pattern)
+        self._refresh_list()
 
 
 def main() -> None:
