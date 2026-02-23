@@ -1,0 +1,28 @@
+interface GigabitEthernet0/0
+ description WAN Link - Updated
+ ip address 192.168.1.1 255.255.255.0
+ no shutdown
+!
+interface GigabitEthernet0/1
+ description LAN Link
+ ip address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface GigabitEthernet0/1.1
+ shutdown
+!
+interface GigabitEthernet0/2
+ description New Interface
+ ip address 172.16.0.1 255.255.255.0
+ no shutdown
+!
+interface GigabitEthernet0/3
+ description New Interface
+ ip address 172.16.0.1 255.255.255.0
+ no shutdown
+!
+
+router ospf 1
+ network 192.168.1.0 0.0.0.255 area 0
+ network 10.0.1.0 0.0.0.255 area 0
+!

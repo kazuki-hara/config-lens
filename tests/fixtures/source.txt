@@ -1,0 +1,14 @@
+block-A
+block-B
+ content-B1
+DELETE-block-A
+block-C
+ content-C1
+ content-C2
+ DELETE-content-C3
+DELETE-block-B
+ DELETE-content-B1
+block-D
+ content-D1
+ DELETE-content-D2
+ content-D3
