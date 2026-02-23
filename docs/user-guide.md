@@ -8,7 +8,7 @@ ConfigLens を実際に使うためのガイドです。
 
 ### リリース版（推奨）
 
-[GitHub Releases](../../releases/latest) から最新版をダウンロードしてください。
+[GitHub Releases](../../../releases/latest) から最新版をダウンロードしてください。
 
 #### macOS
 
