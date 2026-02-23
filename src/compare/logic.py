@@ -1,66 +1,76 @@
+"""比較ロジックモジュール。
+
+テキストおよびネットワーク機器コンフィグの差分計算ロジックを提供する。
+"""
+
 import difflib
+
 from hier_config import HConfig, Platform, get_hconfig
 
-try:
-    from src.utils import (
-        calcurate_hierarcihical_path,
-        remove_plus_minus_from_diff_line,
-    )
-except ModuleNotFoundError:
-    from utils import (
-        calcurate_hierarcihical_path,
-        remove_plus_minus_from_diff_line,
-    )
+from src.utils import (
+    calcurate_hierarcihical_path,
+    remove_plus_minus_from_diff_line,
+)
+
 
 class HierarchicalDiffAnalyzer:
-    def __init__(self):
-        pass
+    """階層構造を持つコンフィグの差分を解析するクラス。"""
 
     @staticmethod
-    def analyze_structural_diff(source_config: HConfig, target_config: HConfig) -> dict:
-        """コンフィグ構造の差分を出力する
+    def analyze_structural_diff(
+        source_config: HConfig,
+        target_config: HConfig,
+    ) -> dict[str, list[list[str]]]:
+        """コンフィグ構造の差分を出力する。
 
         Args:
-            source_config (HConfig): 比較元のrunning-config
-            target_config (HConfig): 比較先のrunning-config
+            source_config: 比較元の running-config
+            target_config: 比較先の running-config
+
+        Returns:
+            差分情報の辞書。キーは以下の通り。
+
+            - ``additional_parts``: target にのみ存在する行のパスリスト
+            - ``deletional_parts``: source にのみ存在する行のパスリスト
+            - ``non_changed_parts``: 両方に存在する行のパスリスト
         """
         structural_diff = list(source_config.unified_diff(target_config))
         cleaned_diff = [
             remove_plus_minus_from_diff_line(line) for line in structural_diff
         ]
         structural_diff_path_list = calcurate_hierarcihical_path(cleaned_diff)
-        additinal_parts_path_list = []
-        deletional_parts_path_list = []
-        non_changed_parts_path_list = []
+        additional_parts: list[list[str]] = []
+        deletional_parts: list[list[str]] = []
+        non_changed_parts: list[list[str]] = []
         for diff_path, line in zip(structural_diff_path_list, structural_diff):
-            if line.lstrip().startswith('+'):
-                additinal_parts_path_list.append(diff_path)
-            elif line.lstrip().startswith('-'):
-                deletional_parts_path_list.append(diff_path)
+            if line.lstrip().startswith("+"):
+                additional_parts.append(diff_path)
+            elif line.lstrip().startswith("-"):
+                deletional_parts.append(diff_path)
             else:
-                non_changed_parts_path_list.append(diff_path)
+                non_changed_parts.append(diff_path)
         return {
-            "additional_parts": additinal_parts_path_list,
-            "deletional_parts": deletional_parts_path_list,
-            "non_changed_parts": non_changed_parts_path_list
+            "additional_parts": additional_parts,
+            "deletional_parts": deletional_parts,
+            "non_changed_parts": non_changed_parts,
         }
 
 
 class TextAlignedDiffComparator:
-    """2つのテキストを比較し、WinMergeのように高さを揃えるクラス"""
+    """2つのテキストを比較し、WinMergeのように高さを揃えるクラス。"""
 
     @staticmethod
     def _build_hierarchical_keys(lines: list[str]) -> list[str]:
-        """各行の階層パスをキーとして返す
+        """各行の階層パスをキーとして返す。
 
         階層パスを使用することで、同じテキストでも異なる階層にある行を
         区別して比較できます。
 
         Args:
-            lines (list[str]): テキストの行のリスト
+            lines: テキストの行のリスト
 
         Returns:
-            list[str]: 各行の階層パスを連結したキーのリスト
+            各行の階層パスを連結したキーのリスト
 
         Example:
             >>> lines = ["interface Gi0/0", " no shutdown"]
@@ -78,20 +88,18 @@ class TextAlignedDiffComparator:
         source_keys: list[str],
         target_keys: list[str],
     ) -> tuple[list[str], list[str], list[str]]:
-        """階層パスキーを使って差分を計算し、行を揃える内部メソッド
+        """階層パスキーを使って差分を計算し、行を揃える内部メソッド。
 
         Args:
-            source_lines (list[str]): source側の表示用行リスト
-            target_lines (list[str]): target側の表示用行リスト
-            source_keys (list[str]): source側の比較用キーリスト
-            target_keys (list[str]): target側の比較用キーリスト
+            source_lines: source側の表示用行リスト
+            target_lines: target側の表示用行リスト
+            source_keys: source側の比較用キーリスト
+            target_keys: target側の比較用キーリスト
 
         Returns:
-            tuple[list[str], list[str], list[str]]: (
-                source側の行リスト,
-                target側の行リスト,
-                差分タイプのリスト ("equal", "delete", "insert", "replace")
-            )
+            タプル ``(source行リスト, target行リスト, 差分タイプリスト)``。
+            差分タイプは ``"equal"``, ``"delete"``, ``"insert"``,
+            ``"replace"`` のいずれか。
         """
         aligned_source, aligned_target, src_keys, tgt_keys = (
             TextAlignedDiffComparator._build_aligned_diff_with_keys(
@@ -117,21 +125,18 @@ class TextAlignedDiffComparator:
         source_keys: list[str],
         target_keys: list[str],
     ) -> tuple[list[str], list[str], list[str], list[str]]:
-        """階層パスキーを使って差分を計算し、行とキーを揃えて返す内部メソッド
+        """階層パスキーを使って差分を計算し、行とキーを揃えて返す内部メソッド。
 
         Args:
-            source_lines (list[str]): source側の表示用行リスト
-            target_lines (list[str]): target側の表示用行リスト
-            source_keys (list[str]): source側の比較用キーリスト
-            target_keys (list[str]): target側の比較用キーリスト
+            source_lines: source側の表示用行リスト
+            target_lines: target側の表示用行リスト
+            source_keys: source側の比較用キーリスト
+            target_keys: target側の比較用キーリスト
 
         Returns:
-            tuple[list[str], list[str], list[str], list[str]]: (
-                source側の行リスト,
-                target側の行リスト,
-                source側の整列後キーリスト（空行は""）,
-                target側の整列後キーリスト（空行は""）
-            )
+            タプル ``(source行リスト, target行リスト,
+            source整列後キーリスト, target整列後キーリスト)``。
+            空行のキーは ``""``。
         """
         aligned_source: list[str] = []
         aligned_target: list[str] = []
@@ -192,18 +197,17 @@ class TextAlignedDiffComparator:
     def compare_and_align(
         source_text: str, target_text: str
     ) -> tuple[list[str], list[str]]:
-        """2つのテキストを比較し、高さを揃えた行のリストを返す
+        """2つのテキストを比較し、高さを揃えた行のリストを返す。
 
         階層パスをキーとして差分を計算するため、同じテキストでも
         異なる親ブロック下にある行は別物として扱われます。
 
         Args:
-            source_text (str): 比較元のテキスト
-            target_text (str): 比較先のテキスト
+            source_text: 比較元のテキスト
+            target_text: 比較先のテキスト
 
         Returns:
-            tuple[list[str], list[str]]: 高さを揃えた
-                (source側の行リスト, target側の行リスト)
+            高さを揃えた ``(source側行リスト, target側行リスト)``。
 
         Example:
             >>> source = "line1\\nline2\\nline4"
@@ -235,21 +239,16 @@ class TextAlignedDiffComparator:
     def compare_and_align_with_diff_info(
         source_text: str, target_text: str
     ) -> tuple[list[str], list[str], list[str]]:
-        """2つのテキストを比較し、高さを揃えた行と差分情報を返す
-
-        階層パスをキーとして差分を計算するため、同じテキストでも
-        異なる親ブロック下にある行は別物として扱われます。
+        """2つのテキストを比較し、高さを揃えた行と差分情報を返す。
 
         Args:
-            source_text (str): 比較元のテキスト
-            target_text (str): 比較先のテキスト
+            source_text: 比較元のテキスト
+            target_text: 比較先のテキスト
 
         Returns:
-            tuple[list[str], list[str], list[str]]: (
-                source側の行リスト,
-                target側の行リスト,
-                差分タイプのリスト ("equal", "delete", "insert", "replace")
-            )
+            タプル ``(source行リスト, target行リスト, 差分タイプリスト)``。
+            差分タイプは ``"equal"``, ``"delete"``, ``"insert"``,
+            ``"replace"`` のいずれか。
         """
         source_lines = source_text.splitlines()
         target_lines = target_text.splitlines()
@@ -269,37 +268,35 @@ class TextAlignedDiffComparator:
         target_text: str,
         platform: Platform,
     ) -> tuple[
-        list[str], list[str],
-        list[str], list[str],
-        list[str], list[str],
+        list[str],
+        list[str],
+        list[str],
+        list[str],
+        list[str],
+        list[str],
     ]:
-        """構造的差分に基づき、高さを揃えた行とハイライト情報を返す
+        """構造的差分に基づき、高さを揃えた行とハイライト情報を返す。
 
         行の整列はテキスト差分（SequenceMatcher）で行い、ハイライトの判定は
         hier_config の analyze_structural_diff に基づく構造的差分で行います。
         これにより、記載順が異なっても構造的に同一の行はハイライトされません。
 
         ハイライトタイプ:
-            - "equal"  : 両方に存在し、順番も一致
-            - "delete" : sourceにのみ存在
-            - "insert" : targetにのみ存在
-            - "reorder": 両方に存在するが、順番が異なる
-            - "empty"  : 対応行がない側のパディング
+            - ``"equal"``  : 両方に存在し、順番も一致
+            - ``"delete"`` : sourceにのみ存在
+            - ``"insert"`` : targetにのみ存在
+            - ``"reorder"``: 両方に存在するが、順番が異なる
+            - ``"empty"``  : 対応行がない側のパディング
 
         Args:
-            source_text (str): 比較元のテキスト
-            target_text (str): 比較先のテキスト
-            platform (Platform): コンフィグのプラットフォーム
+            source_text: 比較元のテキスト
+            target_text: 比較先のテキスト
+            platform: コンフィグのプラットフォーム
 
         Returns:
-            tuple: (
-                source側の行リスト,
-                target側の行リスト,
-                source側のハイライトタイプリスト,
-                target側のハイライトタイプリスト,
-                source側の整列後キーリスト,
-                target側の整列後キーリスト,
-            )
+            タプル ``(source行リスト, target行リスト,
+            source差分タイプリスト, target差分タイプリスト,
+            source整列後キーリスト, target整列後キーリスト)``。
         """
         source_lines = source_text.splitlines()
         target_lines = target_text.splitlines()

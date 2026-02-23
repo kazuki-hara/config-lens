@@ -1,5 +1,3 @@
-import pytest
-
 from src.utils import calcurate_hierarcihical_path
 
 def test_calcurate_hierarcihical_path():

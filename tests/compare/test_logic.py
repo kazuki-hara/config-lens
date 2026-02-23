@@ -1,35 +1,37 @@
+"""比較ロジック（logic.py）のテスト。"""
+
 import pytest
-from hier_config import get_hconfig, Platform
+from hier_config import Platform, get_hconfig
 from hier_config.utils import read_text_from_file
 
-from src.diff import HierarchicalDiffAnalyzer, TextAlignedDiffComparator
+from src.compare.logic import HierarchicalDiffAnalyzer, TextAlignedDiffComparator
+
 
 @pytest.fixture
 def source_config():
-    # テスト用のHConfigオブジェクトを作成
+    """テスト用のHConfigオブジェクト（source）。"""
     config_txt = read_text_from_file("tests/fixtures/source.txt")
-    config = get_hconfig(Platform.CISCO_IOS, config_txt)
-    return config
+    return get_hconfig(Platform.CISCO_IOS, config_txt)
 
 
 @pytest.fixture
 def target_config():
-    # テスト用のHConfigオブジェクトを作成
+    """テスト用のHConfigオブジェクト（target）。"""
     config_txt = read_text_from_file("tests/fixtures/target.txt")
-    config = get_hconfig(Platform.CISCO_IOS, config_txt)
-    return config
+    return get_hconfig(Platform.CISCO_IOS, config_txt)
 
 
 def test_analyze_structural_diff(source_config, target_config):
+    """HierarchicalDiffAnalyzer.analyze_structural_diff が正常に動作すること。"""
     diff_analyzer = HierarchicalDiffAnalyzer()
     diff_analyzer.analyze_structural_diff(source_config, target_config)
 
 
 class TestTextAlignedDiffComparator:
-    """TextAlignedDiffComparatorのテストクラス"""
+    """TextAlignedDiffComparator のテストクラス。"""
 
     def test_equal_texts(self):
-        """完全に同じテキストの場合"""
+        """完全に同じテキストの場合、行数が一致し内容も等しいこと。"""
         source = "line1\nline2\nline3"
         target = "line1\nline2\nline3"
 
@@ -42,7 +44,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "line2", "line3"]
 
     def test_insert_lines(self):
-        """target側にのみ行が存在する場合"""
+        """target側にのみ行が存在する場合、source側に空行が挿入されること。"""
         source = "line1\nline3"
         target = "line1\nline2\nline3"
 
@@ -55,7 +57,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "line2", "line3"]
 
     def test_delete_lines(self):
-        """source側にのみ行が存在する場合"""
+        """source側にのみ行が存在する場合、target側に空行が挿入されること。"""
         source = "line1\nline2\nline3"
         target = "line1\nline3"
 
@@ -68,7 +70,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "", "line3"]
 
     def test_replace_lines(self):
-        """行が置換された場合"""
+        """行が置換された場合、高さが揃うこと。"""
         source = "line1\nline2\nline4"
         target = "line1\nline3\nline4"
 
@@ -81,7 +83,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "line3", "line4"]
 
     def test_replace_multiple_lines(self):
-        """複数行が置換された場合（行数が異なる）"""
+        """複数行が置換された場合（行数が異なる）でも高さが揃うこと。"""
         source = "line1\nold_line1\nold_line2\nline4"
         target = "line1\nnew_line\nline4"
 
@@ -94,7 +96,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "new_line", "", "line4"]
 
     def test_complex_diff(self):
-        """複雑な差分の場合"""
+        """複雑な差分でも高さが揃い、共通行が先頭・末尾に存在すること。"""
         source = "line1\nline2\nline5\nline6"
         target = "line1\nline3\nline4\nline6"
 
@@ -102,15 +104,12 @@ class TestTextAlignedDiffComparator:
             TextAlignedDiffComparator.compare_and_align(source, target)
         )
 
-        # 高さが揃っていることを確認
         assert len(source_aligned) == len(target_aligned)
-
-        # 最初と最後の行が一致していることを確認
         assert source_aligned[0] == target_aligned[0] == "line1"
         assert source_aligned[-1] == target_aligned[-1] == "line6"
 
     def test_empty_texts(self):
-        """空のテキストの場合"""
+        """空のテキストの場合、結果も空リストであること。"""
         source = ""
         target = ""
 
@@ -121,7 +120,7 @@ class TestTextAlignedDiffComparator:
         assert len(source_aligned) == len(target_aligned) == 0
 
     def test_one_empty_text(self):
-        """一方が空のテキストの場合"""
+        """一方が空テキストの場合、もう一方の行数に合わせて空行が入ること。"""
         source = "line1\nline2\nline3"
         target = ""
 
@@ -134,7 +133,7 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["", "", ""]
 
     def test_compare_and_align_with_diff_info_equal(self):
-        """差分情報付き比較 - 同じテキスト"""
+        """差分情報付き比較 - 同じテキストはすべて equal になること。"""
         source = "line1\nline2\nline3"
         target = "line1\nline2\nline3"
 
@@ -148,7 +147,7 @@ class TestTextAlignedDiffComparator:
         assert all(dt == "equal" for dt in diff_types)
 
     def test_compare_and_align_with_diff_info_delete(self):
-        """差分情報付き比較 - 削除"""
+        """差分情報付き比較 - 削除行が delete タイプになること。"""
         source = "line1\nline2\nline3"
         target = "line1\nline3"
 
@@ -166,7 +165,7 @@ class TestTextAlignedDiffComparator:
         assert target_lines[1] == ""
 
     def test_compare_and_align_with_diff_info_insert(self):
-        """差分情報付き比較 - 挿入"""
+        """差分情報付き比較 - 挿入行が insert タイプになること。"""
         source = "line1\nline3"
         target = "line1\nline2\nline3"
 
@@ -184,7 +183,7 @@ class TestTextAlignedDiffComparator:
         assert target_lines[1] == "line2"
 
     def test_compare_and_align_with_diff_info_replace(self):
-        """差分情報付き比較 - 置換"""
+        """差分情報付き比較 - 置換行が replace タイプになること。"""
         source = "line1\nline2\nline4"
         target = "line1\nline3\nline4"
 
@@ -202,12 +201,11 @@ class TestTextAlignedDiffComparator:
         assert target_lines[1] == "line3"
 
     def test_hierarchical_diff_same_text_different_parent(self):
-        """階層構造を持つテキストの比較
+        """異なる親ブロック下の同一テキストが誤ってマッチされないこと。
 
-        異なる親ブロック下にある同じテキスト（no shutdown等）が
-        誤ってマッチされないことを確認する（実際のバグの再現テスト）
+        no shutdown のような共通行が、異なる親インターフェース配下にある場合に
+        誤ったマッチングが行われないことを確認する（実際のバグの再現テスト）。
         """
-        # sourceはGi0/1配下にno shutdown
         source = (
             "interface GigabitEthernet0/0\n"
             " no shutdown\n"
@@ -217,7 +215,6 @@ class TestTextAlignedDiffComparator:
             " no shutdown\n"
             "!"
         )
-        # targetはGi0/1とGi0/2（新規追加）配下にno shutdown
         target = (
             "interface GigabitEthernet0/0\n"
             " no shutdown\n"
@@ -240,31 +237,31 @@ class TestTextAlignedDiffComparator:
 
         assert len(source_lines) == len(target_lines) == len(diff_types)
 
-        # GigabitEthernet0/0のブロックはequalのはず
+        # GigabitEthernet0/0 のブロックは equal のはず
         assert source_lines[0] == target_lines[0] == "interface GigabitEthernet0/0"
         assert diff_types[0] == "equal"
         assert source_lines[1] == target_lines[1] == " no shutdown"
         assert diff_types[1] == "equal"
 
-        # GigabitEthernet0/1配下のno shutdownはGi0/2のno shutdownと
-        # 誤ってマッチされてはならない（Gi0/1行はequalのはず）
+        # GigabitEthernet0/1 配下の no shutdown は Gi0/2 の no shutdown と
+        # 誤ってマッチされてはならない（Gi0/1 行は equal のはず）
         gi01_no_shutdown_idx = source_lines.index(
             " no shutdown",
-            source_lines.index("interface GigabitEthernet0/1")
+            source_lines.index("interface GigabitEthernet0/1"),
         )
         assert diff_types[gi01_no_shutdown_idx] == "equal"
 
-        # GigabitEthernet0/2ブロックはinsertのはず
+        # GigabitEthernet0/2 ブロックは insert のはず
         gi02_idx = target_lines.index("interface GigabitEthernet0/2")
         assert source_lines[gi02_idx] == ""
         assert diff_types[gi02_idx] == "insert"
 
 
 class TestStructuralDiffComparator:
-    """compare_and_align_with_structural_diff_infoのテストクラス"""
+    """compare_and_align_with_structural_diff_info のテストクラス。"""
 
     def test_equal_configs(self):
-        """同一コンフィグはすべてequalになること"""
+        """同一コンフィグはすべて equal になること。"""
         config = (
             "interface GigabitEthernet0/0\n"
             " ip address 192.168.1.1 255.255.255.0\n"
@@ -283,7 +280,7 @@ class TestStructuralDiffComparator:
         assert all(t == "equal" for t in tgt_types)
 
     def test_deleted_interface(self):
-        """sourceにのみ存在するinterfaceブロックがdeleteになること"""
+        """source にのみ存在するインターフェースブロックが delete になること。"""
         source = (
             "interface GigabitEthernet0/0\n"
             " no shutdown\n"
@@ -306,15 +303,13 @@ class TestStructuralDiffComparator:
 
         assert len(src_lines) == len(tgt_lines) == len(src_types)
 
-        # Gi0/1配下の行はsource側でdeleteになるはず
         gi01_idx = src_lines.index("interface GigabitEthernet0/1")
         assert src_types[gi01_idx] == "delete"
-        # target側は空行（empty）になるはず
         assert tgt_lines[gi01_idx] == ""
         assert tgt_types[gi01_idx] == "empty"
 
     def test_inserted_interface(self):
-        """targetにのみ存在するinterfaceブロックがinsertになること"""
+        """target にのみ存在するインターフェースブロックが insert になること。"""
         source = (
             "interface GigabitEthernet0/0\n"
             " no shutdown\n"
@@ -337,15 +332,13 @@ class TestStructuralDiffComparator:
 
         assert len(src_lines) == len(tgt_lines) == len(tgt_types)
 
-        # Gi0/1配下の行はtarget側でinsertになるはず
         gi01_idx = tgt_lines.index("interface GigabitEthernet0/1")
         assert tgt_types[gi01_idx] == "insert"
-        # source側は空行（empty）になるはず
         assert src_lines[gi01_idx] == ""
         assert src_types[gi01_idx] == "empty"
 
     def test_different_order_becomes_reorder(self):
-        """記載順が異なる行はreorderタイプになり、deleteやinsertにはならないこと"""
+        """記載順が異なる行は reorder になり、delete/insert にならないこと。"""
         source = (
             "interface GigabitEthernet0/0\n"
             " no shutdown\n"
@@ -354,7 +347,6 @@ class TestStructuralDiffComparator:
             " no shutdown\n"
             "!"
         )
-        # sourceとtargetでinterfaceの順番を入れ替え
         target = (
             "interface GigabitEthernet0/1\n"
             " no shutdown\n"
@@ -370,15 +362,17 @@ class TestStructuralDiffComparator:
             )
         )
 
-        # 両方に同じ内容が存在するため、deleteもinsertもないはず
         assert "delete" not in src_types
         assert "insert" not in tgt_types
-        # 順番が異なるためreorderになるはず
         assert "reorder" in src_types
         assert "reorder" in tgt_types
 
     def test_reorder_detection(self):
-        """記載順が異なる行がreorderとしてハイライトされること"""
+        """記載順が異なる行がreorderとしてハイライトされること。
+
+        クリックジャンプに必要な src_keys / tgt_keys の reorder キーが
+        両側で一致することも確認する。
+        """
         source = (
             "interface GigabitEthernet0/0"
             "\n no shutdown"
@@ -387,7 +381,6 @@ class TestStructuralDiffComparator:
             "\n no shutdown"
             "\n!"
         )
-        # sourceとtargetでinterfaceの順番を入れ替え
         target = (
             "interface GigabitEthernet0/1"
             "\n no shutdown"
@@ -403,18 +396,16 @@ class TestStructuralDiffComparator:
             )
         )
 
-        # deleteもinsertもなく、reorderが存在するはず
         assert "delete" not in src_types
         assert "insert" not in tgt_types
         assert "reorder" in src_types
         assert "reorder" in tgt_types
 
-        # reorderのsrc_keyとtgt_keyが一致すること（クリックジャンプに必要）
+        # reorder のキーが両側で一致すること（クリックジャンプに必要）
         src_reorder_keys = {
             src_keys[i] for i, t in enumerate(src_types) if t == "reorder"
         }
         tgt_reorder_keys = {
             tgt_keys[i] for i, t in enumerate(tgt_types) if t == "reorder"
         }
-        # 両側のreorderキーが一致するはず
         assert src_reorder_keys == tgt_reorder_keys

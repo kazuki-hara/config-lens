@@ -8,10 +8,13 @@ dependencies = [
     "customtkinter>=5.2.2",
     "hier-config>=3.4.1",
     "platformdirs>=4.9.2",
+    "pyinstaller>=6.19.0",
 ]
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
+    "pyyaml>=6.0.3",
     "ruff>=0.15.2",
 ]
