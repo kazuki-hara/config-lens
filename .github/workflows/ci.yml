@@ -97,7 +97,7 @@ jobs:
         run: task build:mac
 
       - name: Archive macOS app
-        run: zip -ry ConfigLens-mac.zip dist/ConfigLens.app
+        run: cd dist && zip -ry ../ConfigLens-mac.zip ConfigLens.app
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
