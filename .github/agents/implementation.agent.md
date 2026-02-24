@@ -19,6 +19,27 @@ description: 実装専門。コードの品質と効率を向上させる
 2. 境界値やエッジケースが考慮されているか
 3. コードが読みやすく、メンテナブルであるか
 
+## Issue から PR まで自律実施する場合
+
+**`.github/agents/issue-driven-dev.agent.md`** を参照して全手順（ブランチ作成 → 設計 → 実装 → テスト → ドキュメント → コミット → PR）を実施してください。
+
+## ブランチ命名規則（抜粋）
+
+```
+<種類>/<issue番号>-<作業内容の英語要約>
+例: feature/12-add-vlan-filter-to-config-validator
+```
+
+## コミットメッセージ規約（抜粋）
+
+```
+feat: <新機能の要旨>
+fix: <バグ修正の要旨>
+refactor: <リファクタリングの要旨>
+```
+
+> 完全な規約は `.github/agents/issue-driven-dev.agent.md` の「Step 7: コミット」を参照。
+
 ## ドキュメント更新・精査の手順
 
 実装が完了したあと、必ず以下の手順で `docs/` を更新し精査してください。
@@ -58,3 +79,6 @@ description: 実装専門。コードの品質と効率を向上させる
 - [ ] user-guide.md の操作手順が実際の UI の動作と一致しているか
 - [ ] コードの docstring と docs/ の説明に矛盾がないか
 - [ ] `docs/index.md` の「主な特徴」に新機能が漏れなく反映されているか
+- [ ] `uv run ruff check src/ tests/` がエラーゼロ
+- [ ] `uv run pyright src/` がエラーゼロ
+- [ ] `uv run pytest --tb=short -q` が全件グリーン

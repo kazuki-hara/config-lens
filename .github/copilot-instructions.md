@@ -45,6 +45,36 @@ Python3.14 + uvで構築されたGUIアプリケーションです。
 - hotfix/xxx: 本番環境の緊急修正用ブランチ
 - release/xxx: リリース準備用ブランチ
 
+# Agent ファイル
+
+`.github/agents/` 配下に自律実行用の Agent ファイルを用意しています。
+特定の作業を依頼する際は、対応する Agent ファイルを指定してください。
+
+| ファイル | 用途 |
+|---|---|
+| `design-reviewer.agent.md` | アーキテクチャの設計レビュー・ドキュメント整合性チェック |
+| `implementation.agent.md` | 機能実装・コード品質向上 |
+| `test-writer.agent.md` | テストケース設計・作成 |
+| `refactor.agent.md` | コードの棚卸し・リファクタリング（4ステップ自動実行） |
+| `issue-driven-dev.agent.md` | Issue → ブランチ → 実装 → テスト → ドキュメント → コミット → PR の全工程自動化 |
+
+## 使い分けガイド
+
+- **コードの品質を総点検したい** → `refactor.agent.md`
+- **GitHub Issue から実装・PR まで自動化したい** → `issue-driven-dev.agent.md`
+- **設計・アーキテクチャのレビューだけ行いたい** → `design-reviewer.agent.md`
+- **特定モジュールのテストを補完したい** → `test-writer.agent.md`
+- **実装のみを依頼したい（設計済み）** → `implementation.agent.md`
+
+## ブランチ命名規則（`issue-driven-dev.agent.md` 準拠）
+
+```
+<種類>/<issue番号>-<作業内容の英語要約>
+例: feature/12-add-vlan-filter-to-config-validator
+    fix/34-fix-null-pointer-in-validate-logic
+    refactor/56-centralize-platform-map
+```
+
 # その他
 
 - 定期的にコードベースを見直し、技術的負債の解消やパフォーマンスの最適化を行なってください。

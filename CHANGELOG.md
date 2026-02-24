@@ -27,6 +27,7 @@
 - `validate/logic.py` の未使用定数 `LINE_NUM_WIDTH` を削除
 - テストアーキテクチャ（`tests/validate/` 新設）とフィクスチャファイル（`eBGP/`・`vlan/`）を整備
 - `docs/architecture.md`・`docs/development.md` を機能追加に合わせて更新
+- `README.md`・`docs/user-guide.md` のmacOSインストール手順を「`システム設定`→`プライバシーとセキュリティ`で許可」に文言統一
 
 ---
 
