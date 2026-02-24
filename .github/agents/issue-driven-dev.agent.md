@@ -227,6 +227,24 @@ uv run pytest --tb=short -q
 | ユーザー操作に関わる変更 | `docs/user-guide.md` |
 | テストファイルの追加 | `docs/development.md`（テスト構成表） |
 | フィクスチャの追加 | `docs/development.md`（フィクスチャ表） |
+| リリース準備（バージョン bump） | 下記「バージョン更新」参照 |
+
+### バージョン更新（リリース時のみ）
+
+リリース番号を上げる際は、以下の **3 ファイルをすべて** 更新する。
+
+| ファイル | 更新箇所 | 例 |
+|---|---|---|
+| `pyproject.toml` | `version = "x.y.z"` | `version = "0.2.1"` |
+| `src/menu.py` | `_APP_VERSION = "vx.y.z"`（`PackageNotFoundError` 時のフォールバック値） | `_APP_VERSION = "v0.2.1"` |
+| `CHANGELOG.md` | ファイル先頭に新バージョンのエントリを追加 | `## [0.2.1] - YYYY-MM-DD` |
+
+バージョン更新は独立した `chore` コミットとしてまとめる。
+
+```bash
+git add pyproject.toml src/menu.py CHANGELOG.md
+git commit -m "chore: バージョンを vX.Y.Z に更新"
+```
 
 ---
 
@@ -399,6 +417,12 @@ PR を作成する前に以下をすべて確認する。
 
 - [ ] 変更内容が `docs/architecture.md` に反映されている
 - [ ] テスト構成が `docs/development.md` に反映されている
+
+### バージョン更新（リリース時のみ）
+
+- [ ] `pyproject.toml` の `version` を更新した
+- [ ] `src/menu.py` の `_APP_VERSION` フォールバック値を更新した
+- [ ] `CHANGELOG.md` に新バージョンのエントリを追加した
 
 ### PR
 

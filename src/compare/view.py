@@ -217,6 +217,7 @@ class CompareView(ctk.CTkFrame):
             insertbackground="#ffffff",
             font=("Courier", 11),
             cursor="arrow",
+            state="disabled",
         )
         self.source_text.grid(row=0, column=0, sticky="nsew")
         self.source_text.bind("<Button-1>", self._on_source_click)
@@ -246,6 +247,7 @@ class CompareView(ctk.CTkFrame):
             insertbackground="#ffffff",
             font=("Courier", 11),
             cursor="arrow",
+            state="disabled",
         )
         self.target_text.grid(row=0, column=0, sticky="nsew")
         self.target_text.bind("<Button-1>", self._on_target_click)
@@ -618,7 +620,9 @@ class CompareView(ctk.CTkFrame):
                 if t == "reorder"
             }
 
-            # テキストエリアをクリア
+            # テキストエリアを一時的に編集可能にしてクリア
+            self.source_text.config(state="normal")
+            self.target_text.config(state="normal")
             self.source_text.delete("1.0", "end")
             self.target_text.delete("1.0", "end")
 
@@ -640,6 +644,10 @@ class CompareView(ctk.CTkFrame):
                     self.target_text.tag_add(
                         tgt_type, f"{i}.0", f"{i}.end"
                     )
+
+            # 描画完了後に読み取り専用に戻す（tag操作のみ・disabled状態でも動作）
+            self.source_text.config(state="disabled")
+            self.target_text.config(state="disabled")
 
             # 文字単位インライン差分のペアリングと適用
             delete_rows: list[tuple[int, str]] = []
