@@ -1,0 +1,11 @@
+interface fastEthernet 0/0.1
+ encapsulation dot1Q 100
+ description vlan 100
+ ip address 10.0.1.0 255.255.255.252
+ no ip proxy-arp 
+
+router bgp 100
+ neighbor 10.0.1.2 remote-as 200
+ redistribute static
+
+no interface fastEthernet0/0.2

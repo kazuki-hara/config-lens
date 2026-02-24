@@ -8,6 +8,12 @@ from collections.abc import Callable
 
 import customtkinter as ctk
 
+# ナビゲーションボタンの配色定数
+_BTN_ACTIVE_FG = "#1f538d"
+_BTN_ACTIVE_HOVER = "#2a6db5"
+_BTN_INACTIVE_FG = "transparent"
+_BTN_INACTIVE_HOVER = "#2a2a2a"
+
 
 class NavigationFrame(ctk.CTkFrame):
     """アプリ左側に表示される縦型ナビゲーションバー。
@@ -20,15 +26,19 @@ class NavigationFrame(ctk.CTkFrame):
         self,
         parent: ctk.CTk | ctk.CTkBaseClass,
         on_compare: Callable[[], None],
+        on_validate: Callable[[], None],
     ) -> None:
         """初期化。
 
         Args:
             parent: 親ウィジェット
-            on_compare: 「Compare Config Files」ボタン押下時のコールバック
+            on_compare: 「Text Diff Viewer」ボタン押下時のコールバック
+            on_validate: 「Config Validator」ボタン押下時のコールバック
         """
         super().__init__(parent, width=160, corner_radius=0)
         self._on_compare = on_compare
+        self._on_validate = on_validate
+        self._nav_buttons: list[ctk.CTkButton] = []
         self._create_widgets()
 
     def _create_widgets(self) -> None:
@@ -58,16 +68,63 @@ class NavigationFrame(ctk.CTkFrame):
             anchor="w",
         ).grid(row=2, column=0, padx=12, pady=(0, 4), sticky="ew")
 
-        # 比較ボタン（アクティブ状態で表示）
+        # Text Diff Viewer ボタン（初期アクティブ）
         self._nav_compare_btn = ctk.CTkButton(
             self,
             text="Text Diff Viewer",
             anchor="w",
-            fg_color="#1f538d",
-            hover_color="#2a6db5",
+            fg_color=_BTN_ACTIVE_FG,
+            hover_color=_BTN_ACTIVE_HOVER,
             corner_radius=6,
-            command=self._on_compare,
+            command=self._handle_compare,
         )
         self._nav_compare_btn.grid(
             row=3, column=0, padx=8, pady=3, sticky="ew"
         )
+
+        # Config Validator ボタン（初期非アクティブ）
+        self._nav_validate_btn = ctk.CTkButton(
+            self,
+            text="Config Validator",
+            anchor="w",
+            fg_color=_BTN_INACTIVE_FG,
+            hover_color=_BTN_INACTIVE_HOVER,
+            corner_radius=6,
+            command=self._handle_validate,
+        )
+        self._nav_validate_btn.grid(
+            row=4, column=0, padx=8, pady=3, sticky="ew"
+        )
+
+        self._nav_buttons = [
+            self._nav_compare_btn,
+            self._nav_validate_btn,
+        ]
+
+    def _set_active(self, active_btn: ctk.CTkButton) -> None:
+        """指定ボタンをアクティブ表示にし、他を非アクティブにする。
+
+        Args:
+            active_btn: アクティブ状態にするボタン
+        """
+        for btn in self._nav_buttons:
+            if btn is active_btn:
+                btn.configure(
+                    fg_color=_BTN_ACTIVE_FG,
+                    hover_color=_BTN_ACTIVE_HOVER,
+                )
+            else:
+                btn.configure(
+                    fg_color=_BTN_INACTIVE_FG,
+                    hover_color=_BTN_INACTIVE_HOVER,
+                )
+
+    def _handle_compare(self) -> None:
+        """Text Diff Viewer ボタン押下時の処理。"""
+        self._set_active(self._nav_compare_btn)
+        self._on_compare()
+
+    def _handle_validate(self) -> None:
+        """Config Validator ボタン押下時の処理。"""
+        self._set_active(self._nav_validate_btn)
+        self._on_validate()

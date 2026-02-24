@@ -70,7 +70,11 @@ class TestTextAlignedDiffComparator:
         assert target_aligned == ["line1", "", "line3"]
 
     def test_replace_lines(self):
-        """行が置換された場合、高さが揃うこと。"""
+        """行が置換された場合、削除行と挿入行をずらして表示すること。
+
+        明確に異なる行を横に並べずに、source側はdelete（target空行）、
+        target側はinsert（source空行）として別行に配置する。
+        """
         source = "line1\nline2\nline4"
         target = "line1\nline3\nline4"
 
@@ -78,12 +82,16 @@ class TestTextAlignedDiffComparator:
             TextAlignedDiffComparator.compare_and_align(source, target)
         )
 
-        assert len(source_aligned) == len(target_aligned) == 3
-        assert source_aligned == ["line1", "line2", "line4"]
-        assert target_aligned == ["line1", "line3", "line4"]
+        # line2 が削除行、line3 が挿入行として別行に配置される
+        assert len(source_aligned) == len(target_aligned) == 4
+        assert source_aligned == ["line1", "line2", "", "line4"]
+        assert target_aligned == ["line1", "", "line3", "line4"]
 
     def test_replace_multiple_lines(self):
-        """複数行が置換された場合（行数が異なる）でも高さが揃うこと。"""
+        """複数行が置換された場合（行数が異なる）でも高さが揃うこと。
+
+        削除行がまとめて並び、その後に挿入行が続くことで高さを揃える。
+        """
         source = "line1\nold_line1\nold_line2\nline4"
         target = "line1\nnew_line\nline4"
 
@@ -91,9 +99,10 @@ class TestTextAlignedDiffComparator:
             TextAlignedDiffComparator.compare_and_align(source, target)
         )
 
-        assert len(source_aligned) == len(target_aligned) == 4
-        assert source_aligned == ["line1", "old_line1", "old_line2", "line4"]
-        assert target_aligned == ["line1", "new_line", "", "line4"]
+        # old_line1, old_line2 が削除行、new_line が挿入行として別行に配置される
+        assert len(source_aligned) == len(target_aligned) == 5
+        assert source_aligned == ["line1", "old_line1", "old_line2", "", "line4"]
+        assert target_aligned == ["line1", "", "", "new_line", "line4"]
 
     def test_complex_diff(self):
         """複雑な差分でも高さが揃い、共通行が先頭・末尾に存在すること。"""
@@ -183,7 +192,10 @@ class TestTextAlignedDiffComparator:
         assert target_lines[1] == "line2"
 
     def test_compare_and_align_with_diff_info_replace(self):
-        """差分情報付き比較 - 置換行が replace タイプになること。"""
+        """差分情報付き比較 - 異なる行はdelete+insertとして別行に表示されること。
+
+        明確に異なる行を横に並べず、delete行の後にinsert行が配置される。
+        """
         source = "line1\nline2\nline4"
         target = "line1\nline3\nline4"
 
@@ -193,12 +205,73 @@ class TestTextAlignedDiffComparator:
             )
         )
 
-        assert len(source_lines) == len(target_lines) == len(diff_types) == 3
+        # line2=delete, line3=insert として別行に配置される
+        assert len(source_lines) == len(target_lines) == len(diff_types) == 4
         assert diff_types[0] == "equal"
-        assert diff_types[1] == "replace"
-        assert diff_types[2] == "equal"
+        assert diff_types[1] == "delete"
+        assert diff_types[2] == "insert"
+        assert diff_types[3] == "equal"
         assert source_lines[1] == "line2"
-        assert target_lines[1] == "line3"
+        assert target_lines[1] == ""
+        assert source_lines[2] == ""
+        assert target_lines[2] == "line3"
+
+    def test_different_interface_blocks_are_not_aligned_on_same_line(self):
+        """異なるインターフェースブロックが同じ行に表示されないこと。
+
+        source の interface FastEthernet0/0.2 ブロックと
+        target の interface fastEthernet 0/0.1 ブロックは別物なので
+        横に並ばず、ずらして（delete + insert として）表示されること。
+        """
+        source = (
+            "interface FastEthernet0/0.2\n"
+            " ip address 10.0.1.1 255.255.255.252\n"
+            " duplex auto\n"
+            " speed auto"
+        )
+        target = (
+            "interface fastEthernet 0/0.1\n"
+            " encapsulation dot1Q 100\n"
+            " description vlan 100\n"
+            " ip address 10.0.1.0 255.255.255.252\n"
+            " no ip proxy-arp"
+        )
+
+        source_aligned, target_aligned, diff_types = (
+            TextAlignedDiffComparator.compare_and_align_with_diff_info(
+                source, target
+            )
+        )
+
+        assert len(source_aligned) == len(target_aligned) == len(diff_types)
+
+        # source の interface 行が target の interface 行と同じ行に並んでいない
+        for src, tgt in zip(source_aligned, target_aligned):
+            assert not (
+                src.strip().startswith("interface FastEthernet0/0.2")
+                and tgt.strip().startswith("interface fastEthernet 0/0.1")
+            ), (
+                "異なるインターフェースが同じ行に並んでいる: "
+                f"source={src!r}, target={tgt!r}"
+            )
+
+        # source の interface 行は delete、source 側に存在すること
+        src_iface_idx = next(
+            i
+            for i, line in enumerate(source_aligned)
+            if "FastEthernet0/0.2" in line
+        )
+        assert diff_types[src_iface_idx] == "delete"
+        assert target_aligned[src_iface_idx] == ""
+
+        # target の interface 行は insert、target 側に存在すること
+        tgt_iface_idx = next(
+            i
+            for i, line in enumerate(target_aligned)
+            if "fastEthernet 0/0.1" in line
+        )
+        assert diff_types[tgt_iface_idx] == "insert"
+        assert source_aligned[tgt_iface_idx] == ""
 
     def test_hierarchical_diff_same_text_different_parent(self):
         """異なる親ブロック下の同一テキストが誤ってマッチされないこと。
