@@ -10,15 +10,15 @@ import customtkinter as ctk
 from src.compare.settings import AppSettings
 from src.compare.view import CompareView
 from src.menu import NavigationFrame
+from src.validate.view import ValidateView
 
 
 class DiffViewerApp(ctk.CTk):
     """Config Lens アプリのメインウィンドウ。
 
     左列にナビゲーションバー、右列にアクティブなビューを配置する。
-    現在は比較ビュー（``CompareView``）のみ実装されており、
-    将来的な機能追加にはナビゲーションバーにボタンを追加し、
-    対応するビューをコンテンツエリアに配置する。
+    ナビゲーションバーのボタン押下に応じて、コンテンツエリアに
+    表示するビューを切り替える。
     """
 
     def __init__(self) -> None:
@@ -39,20 +39,28 @@ class DiffViewerApp(ctk.CTk):
         self._nav_frame = NavigationFrame(
             self,
             on_compare=self._show_compare_view,
+            on_validate=self._show_validate_view,
         )
         self._nav_frame.grid(row=0, column=0, sticky="nsew")
 
         # --- コンテンツエリア（右側）---
+        # 複数ビューを同じセルに積み重ねて tkraise() で切り替える
         self._compare_view = CompareView(self, self._settings)
         self._compare_view.grid(row=0, column=1, sticky="nsew")
 
-    def _show_compare_view(self) -> None:
-        """比較ビューを表示する。
+        self._validate_view = ValidateView(self)
+        self._validate_view.grid(row=0, column=1, sticky="nsew")
 
-        将来、複数の機能ビューを切り替える際に利用する。
-        現時点では比較ビューのみのため、前面表示するだけ。
-        """
+        # 起動時は比較ビューを前面表示
+        self._show_compare_view()
+
+    def _show_compare_view(self) -> None:
+        """Text Diff Viewer ビューを前面に表示する。"""
         self._compare_view.tkraise()
+
+    def _show_validate_view(self) -> None:
+        """Config Validator ビューを前面に表示する。"""
+        self._validate_view.tkraise()
 
 
 def main() -> None:

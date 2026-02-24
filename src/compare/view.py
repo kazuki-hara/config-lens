@@ -75,6 +75,9 @@ class CompareView(ctk.CTkFrame):
         # 比較済みフラグ（Ignoreトグル時の自動再比較に使用）
         self._has_compared: bool = False
 
+        # 左右スクロール同期の再入防止フラグ
+        self._syncing_scroll: bool = False
+
         # UIの構築
         self._create_widgets()
 
@@ -228,12 +231,15 @@ class CompareView(ctk.CTkFrame):
         )
         self.source_text.grid(row=0, column=0, sticky="nsew")
         self.source_text.bind("<Button-1>", self._on_source_click)
+        self.source_text.bind("<MouseWheel>", self._on_mousewheel)
+        self.source_text.bind("<Button-4>", self._on_mousewheel_linux)
+        self.source_text.bind("<Button-5>", self._on_mousewheel_linux)
 
-        source_scrollbar = ctk.CTkScrollbar(
+        self.source_scrollbar = ctk.CTkScrollbar(
             left_text_frame, command=self._on_scroll
         )
-        source_scrollbar.grid(row=0, column=1, sticky="ns")
-        self.source_text.config(yscrollcommand=source_scrollbar.set)
+        self.source_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.source_text.config(yscrollcommand=self._on_source_yscroll)
 
         # 右テキストエリア（ターゲット）
         right_text_frame = ctk.CTkFrame(main_frame)
@@ -254,12 +260,15 @@ class CompareView(ctk.CTkFrame):
         )
         self.target_text.grid(row=0, column=0, sticky="nsew")
         self.target_text.bind("<Button-1>", self._on_target_click)
+        self.target_text.bind("<MouseWheel>", self._on_mousewheel)
+        self.target_text.bind("<Button-4>", self._on_mousewheel_linux)
+        self.target_text.bind("<Button-5>", self._on_mousewheel_linux)
 
-        target_scrollbar = ctk.CTkScrollbar(
+        self.target_scrollbar = ctk.CTkScrollbar(
             right_text_frame, command=self._on_scroll
         )
-        target_scrollbar.grid(row=0, column=1, sticky="ns")
-        self.target_text.config(yscrollcommand=target_scrollbar.set)
+        self.target_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.target_text.config(yscrollcommand=self._on_target_yscroll)
 
         # タグの設定（差分の色分け）
         self._configure_tags()
@@ -354,10 +363,61 @@ class CompareView(ctk.CTkFrame):
             return
         self._ignore_dialog = IgnorePatternDialog(self, self._ignore_manager)
 
+    def _on_source_yscroll(self, first: float, last: float) -> None:
+        """source テキストがスクロールされたとき scrollbar を更新し target を同期する。"""
+        self.source_scrollbar.set(first, last)
+        if not self._syncing_scroll:
+            self._syncing_scroll = True
+            self.target_text.yview_moveto(first)
+            self._syncing_scroll = False
+
+    def _on_target_yscroll(self, first: float, last: float) -> None:
+        """target テキストがスクロールされたとき scrollbar を更新し source を同期する。"""
+        self.target_scrollbar.set(first, last)
+        if not self._syncing_scroll:
+            self._syncing_scroll = True
+            self.source_text.yview_moveto(first)
+            self._syncing_scroll = False
+
     def _on_scroll(self, *args: object) -> None:
-        """左右テキストのスクロールを同期する。"""
+        """スクロールバーのドラッグで左右テキストを同期スクロールする。"""
         self.source_text.yview(*args)
         self.target_text.yview(*args)
+
+    def _on_mousewheel(self, event: tk.Event) -> str:  # type: ignore[type-arg]
+        """マウスホイール操作で両テキストを同期スクロールする（Windows / macOS）。
+
+        Args:
+            event: マウスホイールイベント。
+
+        Returns:
+            "break" でデフォルトのスクロール動作を抑止する。
+        """
+        scroll_units = int(-1 * (event.delta / 120))
+        if scroll_units == 0:
+            scroll_units = -1 if event.delta > 0 else 1
+        widget = event.widget
+        if isinstance(widget, tk.Text):
+            widget.yview_scroll(scroll_units, "units")
+        return "break"
+
+    def _on_mousewheel_linux(self, event: tk.Event) -> str:  # type: ignore[type-arg]
+        """マウスホイール操作で両テキストを同期スクロールする（Linux）。
+
+        Args:
+            event: Button-4 / Button-5 イベント。
+
+        Returns:
+            "break" でデフォルトのスクロール動作を抑止する。
+        """
+        widget = event.widget
+        if not isinstance(widget, tk.Text):
+            return "break"
+        if event.num == 4:
+            widget.yview_scroll(-1, "units")
+        elif event.num == 5:
+            widget.yview_scroll(1, "units")
+        return "break"
 
     def _open_source_file(self) -> None:
         """ソースファイルを開く。"""

@@ -154,23 +154,43 @@ class TextAlignedDiffComparator:
                     aligned_target_keys.append(target_keys[j1 + (i - i1)])
 
             elif tag == "replace":
-                source_count = i2 - i1
-                target_count = j2 - j1
+                src_block = source_lines[i1:i2]
+                tgt_block = target_lines[j1:j2]
+                src_key_block = source_keys[i1:i2]
+                tgt_key_block = target_keys[j1:j2]
 
-                for i in range(i1, i2):
-                    aligned_source.append(source_lines[i])
-                    aligned_source_keys.append(source_keys[i])
-                for j in range(j1, j2):
-                    aligned_target.append(target_lines[j])
-                    aligned_target_keys.append(target_keys[j])
-
-                diff_count = abs(source_count - target_count)
-                if source_count < target_count:
-                    aligned_source.extend([""] * diff_count)
-                    aligned_source_keys.extend([""] * diff_count)
-                elif target_count < source_count:
-                    aligned_target.extend([""] * diff_count)
-                    aligned_target_keys.extend([""] * diff_count)
+                # replaceブロック内でも階層キーを再マッチングし、
+                # キーが一致する行のみ横に並べる。
+                # 一致しない行（異なる設定）は別行としてずらして表示する。
+                inner_matcher = difflib.SequenceMatcher(
+                    None, src_key_block, tgt_key_block, autojunk=False
+                )
+                for (
+                    inner_tag,
+                    ii1,
+                    ii2,
+                    jj1,
+                    jj2,
+                ) in inner_matcher.get_opcodes():
+                    if inner_tag == "equal":
+                        for k in range(ii2 - ii1):
+                            aligned_source.append(src_block[ii1 + k])
+                            aligned_source_keys.append(src_key_block[ii1 + k])
+                            aligned_target.append(tgt_block[jj1 + k])
+                            aligned_target_keys.append(tgt_key_block[jj1 + k])
+                    else:
+                        # replace / delete / insert はすべて別行に配置し、
+                        # 明確に異なる設定を横に並べないようにする。
+                        for k in range(ii2 - ii1):
+                            aligned_source.append(src_block[ii1 + k])
+                            aligned_source_keys.append(src_key_block[ii1 + k])
+                            aligned_target.append("")
+                            aligned_target_keys.append("")
+                        for k in range(jj2 - jj1):
+                            aligned_source.append("")
+                            aligned_source_keys.append("")
+                            aligned_target.append(tgt_block[jj1 + k])
+                            aligned_target_keys.append(tgt_key_block[jj1 + k])
 
             elif tag == "delete":
                 for i in range(i1, i2):
