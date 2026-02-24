@@ -1,6 +1,8 @@
-from src.utils import calcurate_hierarcihical_path
+from src.utils import calculate_hierarchical_path
 
-def test_calcurate_hierarcihical_path():
+
+def test_calculate_hierarchical_path() -> None:
+    """calculate_hierarchical_path が正しい階層パスを返すこと。"""
     config = [
         "interface GigabitEthernet0/1",
         " description Uplink to Core Switch",
@@ -17,4 +19,4 @@ def test_calcurate_hierarcihical_path():
         ["interface GigabitEthernet0/2", "description Connection to Server"],
         ["interface GigabitEthernet0/2", "ip address 192.168.1.2 255.255.255.0"]
     ]
-    assert calcurate_hierarcihical_path(config) == expected_paths
+    assert calculate_hierarchical_path(config) == expected_paths

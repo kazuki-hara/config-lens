@@ -9,29 +9,18 @@ import tkinter as tk
 from tkinter import filedialog
 
 import customtkinter as ctk
-from hier_config import Platform
 
 from src.compare.ignore import IgnorePatternDialog, IgnorePatternManager
 from src.compare.logic import TextAlignedDiffComparator
+from src.compare.platforms import PLATFORM_MAP
 from src.compare.settings import AppSettings
 
 # 文字単位インライン差分の設定
 _INLINE_DIFF_THRESHOLD: float = 0.4  # ペアリングに必要な最低類似度
 _LINE_NUM_WIDTH: int = 5  # 行番号プレフィックスの文字数 ("   1 ")
 
-# Platform名とPlatform列挙型のマッピング
-_PLATFORM_MAP: dict[str, Platform] = {
-    "CISCO_IOS": Platform.CISCO_IOS,
-    "CISCO_NXOS (Not Supported)": Platform.CISCO_NXOS,
-    "CISCO_XR (Not Supported)": Platform.CISCO_XR,
-    "ARISTA_EOS (Not Supported)": Platform.ARISTA_EOS,
-    "JUNIPER_JUNOS (Not Supported)": Platform.JUNIPER_JUNOS,
-    "FORTINET_FORTIOS (Not Supported)": Platform.FORTINET_FORTIOS,
-    "HP_COMWARE5 (Not Supported)": Platform.HP_COMWARE5,
-    "HP_PROCURVE (Not Supported)": Platform.HP_PROCURVE,
-    "VYOS (Not Supported)": Platform.VYOS,
-    "GENERIC (Not Supported)": Platform.GENERIC,
-}
+# Platform 選択肢マッピング（platforms.py から共通インポート）
+_PLATFORM_MAP = PLATFORM_MAP
 
 
 class CompareView(ctk.CTkFrame):

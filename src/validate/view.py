@@ -15,23 +15,12 @@ import tkinter as tk
 from tkinter import filedialog
 
 import customtkinter as ctk
-from hier_config import Platform
 
+from src.compare.platforms import PLATFORM_MAP
 from src.validate.logic import ValidateResult, validate
 
-# Platform 選択肢（CompareView と同じマッピング）
-_PLATFORM_MAP: dict[str, Platform] = {
-    "CISCO_IOS": Platform.CISCO_IOS,
-    "CISCO_NXOS (Not Supported)": Platform.CISCO_NXOS,
-    "CISCO_XR (Not Supported)": Platform.CISCO_XR,
-    "ARISTA_EOS (Not Supported)": Platform.ARISTA_EOS,
-    "JUNIPER_JUNOS (Not Supported)": Platform.JUNIPER_JUNOS,
-    "FORTINET_FORTIOS (Not Supported)": Platform.FORTINET_FORTIOS,
-    "HP_COMWARE5 (Not Supported)": Platform.HP_COMWARE5,
-    "HP_PROCURVE (Not Supported)": Platform.HP_PROCURVE,
-    "VYOS (Not Supported)": Platform.VYOS,
-    "GENERIC (Not Supported)": Platform.GENERIC,
-}
+# Platform 選択肢マッピング（platforms.py から共通インポート）
+_PLATFORM_MAP = PLATFORM_MAP
 
 # 文字単位インライン差分の最低類似度
 _INLINE_DIFF_THRESHOLD: float = 0.4
@@ -76,6 +65,9 @@ class ValidateView(ctk.CTkFrame):
         # アクティブハイライト中の running / expected 行番号（1ベース）
         self._active_running_rows: list[int] = []
         self._active_expected_rows: list[int] = []
+
+        # 左右スクロール同期の再入防止フラグ
+        self._syncing_scroll: bool = False
 
         self._create_widgets()
 
@@ -220,14 +212,23 @@ class ValidateView(ctk.CTkFrame):
             insertbackground="#ffffff",
             font=("Courier", 11),
             cursor="arrow",
+            state="disabled",
         )
         self._running_text.grid(row=0, column=0, sticky="nsew")
+        self._running_text.bind(
+            "<MouseWheel>", self._on_lr_mousewheel
+        )
+        self._running_text.bind(
+            "<Button-4>", self._on_lr_mousewheel_linux
+        )
+        self._running_text.bind(
+            "<Button-5>", self._on_lr_mousewheel_linux
+        )
 
-        running_vsb = ctk.CTkScrollbar(
+        self._running_vsb = ctk.CTkScrollbar(
             left_frame, command=self._on_lr_yscroll
         )
-        running_vsb.grid(row=0, column=1, sticky="ns")
-        self._running_text.config(yscrollcommand=running_vsb.set)
+        self._running_vsb.grid(row=0, column=1, sticky="ns")
 
         running_hsb = ctk.CTkScrollbar(
             left_frame,
@@ -253,6 +254,7 @@ class ValidateView(ctk.CTkFrame):
             insertbackground="#ffffff",
             font=("Courier", 11),
             cursor="arrow",
+            state="disabled",
         )
         self._change_text.grid(row=0, column=0, sticky="nsew")
         self._change_text.bind("<Button-1>", self._on_change_click)
@@ -287,14 +289,23 @@ class ValidateView(ctk.CTkFrame):
             insertbackground="#ffffff",
             font=("Courier", 11),
             cursor="arrow",
+            state="disabled",
         )
         self._expected_text.grid(row=0, column=0, sticky="nsew")
+        self._expected_text.bind(
+            "<MouseWheel>", self._on_lr_mousewheel
+        )
+        self._expected_text.bind(
+            "<Button-4>", self._on_lr_mousewheel_linux
+        )
+        self._expected_text.bind(
+            "<Button-5>", self._on_lr_mousewheel_linux
+        )
 
-        expected_vsb = ctk.CTkScrollbar(
+        self._expected_vsb = ctk.CTkScrollbar(
             right_frame, command=self._on_lr_yscroll
         )
-        expected_vsb.grid(row=0, column=1, sticky="ns")
-        self._expected_text.config(yscrollcommand=expected_vsb.set)
+        self._expected_vsb.grid(row=0, column=1, sticky="ns")
 
         expected_hsb = ctk.CTkScrollbar(
             right_frame,
@@ -303,6 +314,10 @@ class ValidateView(ctk.CTkFrame):
         )
         expected_hsb.grid(row=1, column=0, sticky="ew")
         self._expected_text.config(xscrollcommand=expected_hsb.set)
+
+        # 両ウィジェット生成後に yscrollcommand を設定（初期化順エラー回避）
+        self._running_text.config(yscrollcommand=self._on_running_yscroll)
+        self._expected_text.config(yscrollcommand=self._on_expected_yscroll)
 
         # タグ設定
         self._configure_tags()
@@ -379,6 +394,12 @@ class ValidateView(ctk.CTkFrame):
             background="#4d4000",
             foreground="#ffe066",
         )
+        # change列: 差分に現れない行（想定漏れ、オレンジ）
+        self._change_text.tag_configure(
+            "unmatched",
+            background="#4d2200",
+            foreground="#ff9933",
+        )
         # change列: クリック選択中の濃い黄色
         self._change_text.tag_configure(
             "active",
@@ -411,10 +432,73 @@ class ValidateView(ctk.CTkFrame):
     # スクロール同期
     # ------------------------------------------------------------------
 
+    def _on_running_yscroll(self, first: float, last: float) -> None:
+        """running テキストがスクロールしたときにスクロールバーを更新し expected を同期する。
+
+        Args:
+            first: 表示範囲の先頭位置（0.0〜1.0）
+            last: 表示範囲の末尾位置（0.0〜1.0）
+        """
+        self._running_vsb.set(first, last)
+        if not self._syncing_scroll:
+            self._syncing_scroll = True
+            self._expected_text.yview_moveto(first)
+            self._syncing_scroll = False
+
+    def _on_expected_yscroll(self, first: float, last: float) -> None:
+        """expected テキストがスクロールしたときにスクロールバーを更新し running を同期する。
+
+        Args:
+            first: 表示範囲の先頭位置（0.0〜1.0）
+            last: 表示範囲の末尾位置（0.0〜1.0）
+        """
+        self._expected_vsb.set(first, last)
+        if not self._syncing_scroll:
+            self._syncing_scroll = True
+            self._running_text.yview_moveto(first)
+            self._syncing_scroll = False
+
     def _on_lr_yscroll(self, *args: object) -> None:
-        """running / expected の縦スクロールを同期する。"""
+        """スクロールバードラッグ時に running / expected の両テキストを同期スクロールする。"""
         self._running_text.yview(*args)
         self._expected_text.yview(*args)
+
+    def _on_lr_mousewheel(
+        self, event: tk.Event  # type: ignore[type-arg]
+    ) -> str:
+        """マウスホイール操作で running / expected を同期スクロールする（Windows / macOS）。
+
+        Args:
+            event: マウスホイールイベント。
+
+        Returns:
+            "break" でデフォルトのスクロール動作を抑止する。
+        """
+        scroll_units = int(-1 * (event.delta / 120))
+        if scroll_units == 0:
+            scroll_units = -1 if event.delta > 0 else 1
+        self._running_text.yview_scroll(scroll_units, "units")
+        self._expected_text.yview_scroll(scroll_units, "units")
+        return "break"
+
+    def _on_lr_mousewheel_linux(
+        self, event: tk.Event  # type: ignore[type-arg]
+    ) -> str:
+        """マウスホイール操作で running / expected を同期スクロールする（Linux）。
+
+        Args:
+            event: Button-4 / Button-5 イベント。
+
+        Returns:
+            "break" でデフォルトのスクロール動作を抑止する。
+        """
+        if event.num == 4:
+            self._running_text.yview_scroll(-1, "units")
+            self._expected_text.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self._running_text.yview_scroll(1, "units")
+            self._expected_text.yview_scroll(1, "units")
+        return "break"
 
     # ------------------------------------------------------------------
     # ファイル選択
@@ -549,12 +633,13 @@ class ValidateView(ctk.CTkFrame):
 
         result = self._result
 
-        # 全テキストエリアをクリア
+        # 全テキストエリアを一時的に編集可能にしてクリア
         for w in (
             self._running_text,
             self._change_text,
             self._expected_text,
         ):
+            w.config(state="normal")
             w.delete("1.0", "end")
 
         # 行番号付きで各列を描画
@@ -580,10 +665,18 @@ class ValidateView(ctk.CTkFrame):
             row = ci + 1
             line_num = f"{row:{_LINE_NUM_WIDTH - 1}d} "
             self._change_text.insert("end", line_num + line + "\n")
-            if ctype == "change":
-                self._change_text.tag_add("change", f"{row}.0", f"{row}.end")
+            if ctype in ("change", "unmatched"):
+                self._change_text.tag_add(ctype, f"{row}.0", f"{row}.end")
 
-        # 文字単位インライン差分（change_remove ↔ change_add の対応行間）
+        # 描画完了後に読み取り専用に戻す
+        for w in (
+            self._running_text,
+            self._change_text,
+            self._expected_text,
+        ):
+            w.config(state="disabled")
+
+        # 文字単位インライン差分（tag操作のみ・disabled状態でも動作）
         self._apply_inline_char_diffs(result)
 
         # ステータスバーを更新
@@ -591,23 +684,43 @@ class ValidateView(ctk.CTkFrame):
         change_add_count = result.expected_types.count("change_add")
         remove_count = result.running_types.count("remove")
         add_count = result.expected_types.count("add")
+        unmatched_count = result.change_types.count("unmatched")
+        jump_hint = " ／ 設定変更内容の黄色行をクリックすると対応行へジャンプ"
 
-        if result.is_valid:
+        if not result.is_valid and result.has_unapplied_change:
             self._status_bar.configure(
                 text=(
-                    f"✓ 検証成功: 全ての差分が設定変更内容由来です "
-                    f"（削除: {change_remove_count}行, "
-                    f"追加: {change_add_count}行）"
-                    " ／ 設定変更内容の黄色行をクリックすると対応行へジャンプ"
+                    f"✗ 検証エラー: 説明できない差分かつ想定漏れがあります "
+                    f"（未説明削除: {remove_count}行, "
+                    f"未説明追加: {add_count}行, "
+                    f"想定漏れ: {unmatched_count}行）"
+                    + jump_hint
                 )
             )
-        else:
+        elif not result.is_valid:
             self._status_bar.configure(
                 text=(
                     f"✗ 検証エラー: 説明できない差分があります "
                     f"（未説明削除: {remove_count}行, "
                     f"未説明追加: {add_count}行）"
-                    " ／ 黄色行をクリックすると対応行へジャンプ"
+                    + jump_hint
+                )
+            )
+        elif result.has_unapplied_change:
+            self._status_bar.configure(
+                text=(
+                    f"⚠ 警告: 差分の説明はできましたが想定漏れがあります "
+                    f"（想定漏れ: {unmatched_count}行）"
+                    + jump_hint
+                )
+            )
+        else:
+            self._status_bar.configure(
+                text=(
+                    f"✓ 検証成功: 全ての差分が設定変更内容由来です "
+                    f"（削除: {change_remove_count}行, "
+                    f"追加: {change_add_count}行）"
+                    + jump_hint
                 )
             )
 

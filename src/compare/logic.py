@@ -8,7 +8,7 @@ import difflib
 from hier_config import HConfig, Platform, get_hconfig
 
 from src.utils import (
-    calcurate_hierarcihical_path,
+    calculate_hierarchical_path,
     remove_plus_minus_from_diff_line,
 )
 
@@ -38,7 +38,7 @@ class HierarchicalDiffAnalyzer:
         cleaned_diff = [
             remove_plus_minus_from_diff_line(line) for line in structural_diff
         ]
-        structural_diff_path_list = calcurate_hierarcihical_path(cleaned_diff)
+        structural_diff_path_list = calculate_hierarchical_path(cleaned_diff)
         additional_parts: list[list[str]] = []
         deletional_parts: list[list[str]] = []
         non_changed_parts: list[list[str]] = []
@@ -78,7 +78,7 @@ class TextAlignedDiffComparator:
             >>> keys[1]
             'interface Gi0/0 > no shutdown'
         """
-        paths = calcurate_hierarcihical_path(lines)
+        paths = calculate_hierarchical_path(lines)
         return [" > ".join(path) for path in paths]
 
     @staticmethod
