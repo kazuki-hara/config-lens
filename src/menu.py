@@ -4,9 +4,16 @@
 新しい機能ビューを追加する場合は、対応するボタンをこのクラスに追加する。
 """
 
+import importlib.metadata
 from collections.abc import Callable
 
 import customtkinter as ctk
+
+# アプリバージョン
+try:
+    _APP_VERSION = f"v{importlib.metadata.version('01-config-lens')}"
+except importlib.metadata.PackageNotFoundError:
+    _APP_VERSION = "v0.1.0"
 
 # ナビゲーションボタンの配色定数
 _BTN_ACTIVE_FG = "#1f538d"
@@ -52,12 +59,20 @@ class NavigationFrame(ctk.CTkFrame):
             self,
             text="Config Lens",
             font=ctk.CTkFont(size=15, weight="bold"),
-        ).grid(row=0, column=0, padx=10, pady=(20, 10), sticky="ew")
+        ).grid(row=0, column=0, padx=10, pady=(20, 2), sticky="ew")
+
+        # バージョン表示
+        ctk.CTkLabel(
+            self,
+            text=_APP_VERSION,
+            font=ctk.CTkFont(size=10),
+            text_color="#888888",
+        ).grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
 
         # 区切り線
         ctk.CTkFrame(
             self, height=2, fg_color="#555555"
-        ).grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ).grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
 
         # セクションラベル
         ctk.CTkLabel(
@@ -66,7 +81,7 @@ class NavigationFrame(ctk.CTkFrame):
             font=ctk.CTkFont(size=11),
             text_color="#888888",
             anchor="w",
-        ).grid(row=2, column=0, padx=12, pady=(0, 4), sticky="ew")
+        ).grid(row=3, column=0, padx=12, pady=(0, 4), sticky="ew")
 
         # Text Diff Viewer ボタン（初期アクティブ）
         self._nav_compare_btn = ctk.CTkButton(
@@ -79,7 +94,7 @@ class NavigationFrame(ctk.CTkFrame):
             command=self._handle_compare,
         )
         self._nav_compare_btn.grid(
-            row=3, column=0, padx=8, pady=3, sticky="ew"
+            row=4, column=0, padx=8, pady=3, sticky="ew"
         )
 
         # Config Validator ボタン（初期非アクティブ）
@@ -93,7 +108,7 @@ class NavigationFrame(ctk.CTkFrame):
             command=self._handle_validate,
         )
         self._nav_validate_btn.grid(
-            row=4, column=0, padx=8, pady=3, sticky="ew"
+            row=5, column=0, padx=8, pady=3, sticky="ew"
         )
 
         self._nav_buttons = [
