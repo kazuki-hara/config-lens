@@ -13,7 +13,7 @@ import customtkinter as ctk
 try:
     _APP_VERSION = f"v{importlib.metadata.version('01-config-lens')}"
 except importlib.metadata.PackageNotFoundError:
-    _APP_VERSION = "v0.2.0"
+    _APP_VERSION = "v0.2.1"
 
 # ナビゲーションボタンの配色定数
 _BTN_ACTIVE_FG = "#1f538d"
