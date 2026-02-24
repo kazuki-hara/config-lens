@@ -66,6 +66,13 @@ class ValidateView(ctk.CTkFrame):
         self._active_running_rows: list[int] = []
         self._active_expected_rows: list[int] = []
 
+        # reorder ジャンプ用キー→行番号マッピング（キー: 階層パスキー文字列、値: 1ベース行番号）
+        self._running_key_to_row: dict[str, int] = {}
+        self._expected_key_to_row: dict[str, int] = {}
+        # 現在アクティブな reorder 強調表示の行番号（1ベース、-1 = 選択なし）
+        self._active_reorder_running_row: int = -1
+        self._active_reorder_expected_row: int = -1
+
         # 左右スクロール同期の再入防止フラグ
         self._syncing_scroll: bool = False
 
@@ -215,6 +222,7 @@ class ValidateView(ctk.CTkFrame):
             state="disabled",
         )
         self._running_text.grid(row=0, column=0, sticky="nsew")
+        self._running_text.bind("<Button-1>", self._on_running_click)
         self._running_text.bind(
             "<MouseWheel>", self._on_lr_mousewheel
         )
@@ -292,6 +300,7 @@ class ValidateView(ctk.CTkFrame):
             state="disabled",
         )
         self._expected_text.grid(row=0, column=0, sticky="nsew")
+        self._expected_text.bind("<Button-1>", self._on_expected_click)
         self._expected_text.bind(
             "<MouseWheel>", self._on_lr_mousewheel
         )
@@ -342,6 +351,12 @@ class ValidateView(ctk.CTkFrame):
             background="#4d3b1f",
             foreground="#ffb347",
         )
+        # running列: reorder行クリック時の強調表示
+        self._running_text.tag_configure(
+            "reorder_active",
+            background="#7a5a1a",
+            foreground="#ffe680",
+        )
         # running列: 空行パディング
         self._running_text.tag_configure(
             "empty", background="#1a1a1a"
@@ -373,6 +388,12 @@ class ValidateView(ctk.CTkFrame):
             "reorder",
             background="#4d3b1f",
             foreground="#ffb347",
+        )
+        # expected列: reorder行クリック時の強調表示
+        self._expected_text.tag_configure(
+            "reorder_active",
+            background="#7a5a1a",
+            foreground="#ffe680",
         )
         # expected列: 空行パディング
         self._expected_text.tag_configure(
@@ -407,13 +428,15 @@ class ValidateView(ctk.CTkFrame):
             foreground="#ffe680",
         )
 
-        # タグ優先順位: active を最前面に
+        # タグ優先順位: active / reorder_active を最前面に
         for w in (
             self._running_text,
             self._change_text,
             self._expected_text,
         ):
             w.tag_raise("active")
+        for w in (self._running_text, self._expected_text):
+            w.tag_raise("reorder_active")
         self._running_text.tag_raise("delete_char")
         self._expected_text.tag_raise("insert_char")
 
@@ -608,6 +631,8 @@ class ValidateView(ctk.CTkFrame):
         self._active_change_idx = -1
         self._active_running_rows = []
         self._active_expected_rows = []
+        self._active_reorder_running_row = -1
+        self._active_reorder_expected_row = -1
         self._render_result()
 
     def _read_file(self, path: str) -> str:
@@ -679,13 +704,27 @@ class ValidateView(ctk.CTkFrame):
         # 文字単位インライン差分（tag操作のみ・disabled状態でも動作）
         self._apply_inline_char_diffs(result)
 
+        # reorder ジャンプ用キー→行番号マッピングを構築
+        self._running_key_to_row = {
+            result.running_keys[i]: i + 1
+            for i, t in enumerate(result.running_types)
+            if t == "reorder"
+        }
+        self._expected_key_to_row = {
+            result.expected_keys[i]: i + 1
+            for i, t in enumerate(result.expected_types)
+            if t == "reorder"
+        }
+
         # ステータスバーを更新
         change_remove_count = result.running_types.count("change_remove")
         change_add_count = result.expected_types.count("change_add")
         remove_count = result.running_types.count("remove")
         add_count = result.expected_types.count("add")
         unmatched_count = result.change_types.count("unmatched")
-        jump_hint = " ／ 設定変更内容の黄色行をクリックすると対応行へジャンプ"
+        jump_hint = (
+            " ／ 設定変更内容の黄色行・順番違いのオレンジ行をクリックすると対応行へジャンプ"
+        )
 
         if not result.is_valid and result.has_unapplied_change:
             self._status_bar.configure(
@@ -827,6 +866,101 @@ class ValidateView(ctk.CTkFrame):
             # running に対応行がない場合は expected 側でスクロール
             self._expected_text.see(f"{expected_rows[0]}.0")
             self._running_text.see(f"{expected_rows[0]}.0")
+
+    def _on_running_click(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        """running-config テキストのクリックハンドラ。
+
+        クリックした行が ``"reorder"`` タイプの場合、
+        expected 側の対応行へジャンプして強調表示する。
+
+        Args:
+            event: マウスクリックイベント
+        """
+        row = int(
+            self._running_text.index(f"@{event.x},{event.y}").split(".")[0]
+        )
+        self._handle_validate_reorder_click(row, side="running")
+
+    def _on_expected_click(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        """想定されるrunning-config テキストのクリックハンドラ。
+
+        クリックした行が ``"reorder"`` タイプの場合、
+        running 側の対応行へジャンプして強調表示する。
+
+        Args:
+            event: マウスクリックイベント
+        """
+        row = int(
+            self._expected_text.index(f"@{event.x},{event.y}").split(".")[0]
+        )
+        self._handle_validate_reorder_click(row, side="expected")
+
+    def _handle_validate_reorder_click(self, row: int, side: str) -> None:
+        """reorder行クリック時にジャンプ＆強調表示する。
+
+        Args:
+            row: クリックされた行番号（1ベース）
+            side: クリックされた側（``"running"`` または ``"expected"``）
+        """
+        if self._result is None:
+            return
+
+        idx = row - 1  # 0ベースインデックス
+
+        if side == "running":
+            if idx >= len(self._result.running_types):
+                return
+            if self._result.running_types[idx] != "reorder":
+                return
+            key = self._result.running_keys[idx]
+            tgt_row = self._expected_key_to_row.get(key, -1)
+            if tgt_row == -1:
+                return
+            self._apply_active_validate_reorder(row, tgt_row)
+            self._expected_text.see(f"{tgt_row}.0")
+
+        else:  # expected
+            if idx >= len(self._result.expected_types):
+                return
+            if self._result.expected_types[idx] != "reorder":
+                return
+            key = self._result.expected_keys[idx]
+            src_row = self._running_key_to_row.get(key, -1)
+            if src_row == -1:
+                return
+            self._apply_active_validate_reorder(src_row, row)
+            self._running_text.see(f"{src_row}.0")
+
+    def _apply_active_validate_reorder(
+        self, running_row: int, expected_row: int
+    ) -> None:
+        """reorder行を強調表示し、前回の強調をリセットする。
+
+        Args:
+            running_row: running側の強調行番号（1ベース）
+            expected_row: expected側の強調行番号（1ベース）
+        """
+        if self._active_reorder_running_row != -1:
+            self._running_text.tag_remove(
+                "reorder_active",
+                f"{self._active_reorder_running_row}.0",
+                f"{self._active_reorder_running_row}.end",
+            )
+        if self._active_reorder_expected_row != -1:
+            self._expected_text.tag_remove(
+                "reorder_active",
+                f"{self._active_reorder_expected_row}.0",
+                f"{self._active_reorder_expected_row}.end",
+            )
+
+        self._running_text.tag_add(
+            "reorder_active", f"{running_row}.0", f"{running_row}.end"
+        )
+        self._expected_text.tag_add(
+            "reorder_active", f"{expected_row}.0", f"{expected_row}.end"
+        )
+        self._active_reorder_running_row = running_row
+        self._active_reorder_expected_row = expected_row
 
     def _clear_active_highlights(self) -> None:
         """全テキストエリアのアクティブハイライトを解除する。"""

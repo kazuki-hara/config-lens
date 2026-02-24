@@ -35,6 +35,8 @@ class ValidateResult:
             ``"unmatched"``（意味ある変更コマンドだが差分に現れない = 想定漏れ）
         change_to_running: change行インデックス → running列行番号リスト（1ベース）
         change_to_expected: change行インデックス → expected列行番号リスト（1ベース）
+        running_keys: 整列後の running-config 各行の階層パスキーリスト（空行は空文字）
+        expected_keys: 整列後の expected-config 各行の階層パスキーリスト（空行は空文字）
         is_valid: 全差分が設定変更内容由来かどうか
         has_unapplied_change: 設定変更内容に想定漏れ（差分に現れないコマンド）があるか
     """
@@ -47,6 +49,8 @@ class ValidateResult:
     change_types: list[str]
     change_to_running: dict[int, list[int]] = field(default_factory=dict)
     change_to_expected: dict[int, list[int]] = field(default_factory=dict)
+    running_keys: list[str] = field(default_factory=list)
+    expected_keys: list[str] = field(default_factory=list)
     is_valid: bool = True
     has_unapplied_change: bool = False
 
@@ -244,6 +248,8 @@ def validate(
         change_types=change_types,
         change_to_running=change_to_running,
         change_to_expected=change_to_expected,
+        running_keys=list(running_keys),
+        expected_keys=list(expected_keys),
         is_valid=not has_error,
         has_unapplied_change=has_unapplied,
     )

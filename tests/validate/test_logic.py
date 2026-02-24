@@ -63,6 +63,19 @@ class TestValidateResult:
         assert result.change_to_running == {}
         assert result.change_to_expected == {}
 
+    def test_default_keys_are_empty_lists(self) -> None:
+        """running_keys / expected_keys のデフォルトが空リストであること。"""
+        result = ValidateResult(
+            running_lines=[],
+            expected_lines=[],
+            change_lines=[],
+            running_types=[],
+            expected_types=[],
+            change_types=[],
+        )
+        assert result.running_keys == []
+        assert result.expected_keys == []
+
     def test_mutable_default_does_not_share_state(self) -> None:
         """複数インスタンス間でデフォルト辞書が共有されないこと（field(default_factory)）。"""
         r1 = ValidateResult(
@@ -463,6 +476,58 @@ class TestValidateResultStructure:
 
         for t in result.change_types:
             assert t in valid_types, f"想定外の change_type: {t}"
+
+    def test_running_keys_length_matches_running_lines(self) -> None:
+        """running_keys の長さが running_lines と一致すること。"""
+        running = (
+            "interface GigabitEthernet0/0\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            "!"
+        )
+        expected = "!"
+        change = "no interface GigabitEthernet0/0\n!"
+
+        result = validate(running, change, expected, Platform.CISCO_IOS)
+
+        assert len(result.running_keys) == len(result.running_lines)
+
+    def test_expected_keys_length_matches_expected_lines(self) -> None:
+        """expected_keys の長さが expected_lines と一致すること。"""
+        running = (
+            "interface GigabitEthernet0/0\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            "!"
+        )
+        expected = "!"
+        change = "no interface GigabitEthernet0/0\n!"
+
+        result = validate(running, change, expected, Platform.CISCO_IOS)
+
+        assert len(result.expected_keys) == len(result.expected_lines)
+
+    def test_reorder_keys_exist_in_both_columns(self) -> None:
+        """reorder タイプの行は running_keys と expected_keys に同じキーが存在すること。"""
+        # 両方に存在するが順番が異なるコンフィグ
+        running = (
+            "interface GigabitEthernet0/0\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            "interface GigabitEthernet0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!"
+        )
+        expected = (
+            "interface GigabitEthernet0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            "!"
+        )
+        result = validate(running, "", expected, Platform.CISCO_IOS)
+
+        # reorder 行のキーが expected_keys にも含まれていること
+        for i, t in enumerate(result.running_types):
+            if t == "reorder":
+                assert result.running_keys[i] in result.expected_keys
 
 
 # ---------------------------------------------------------------------------
