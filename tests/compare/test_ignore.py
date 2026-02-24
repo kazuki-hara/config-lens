@@ -1,6 +1,7 @@
 """IgnorePatternManager のテスト。"""
 
 import json
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,7 @@ from src.compare.settings import AppSettings
 
 
 @pytest.fixture
-def tmp_settings(tmp_path: Path) -> AppSettings:
+def tmp_settings(tmp_path: Path) -> Generator[AppSettings, None, None]:
     """一時ディレクトリを使用する AppSettings インスタンスを返す。"""
     # モジュールレベルの定数を一時パスで置き換えて使用する
     import src.compare.settings as settings_module

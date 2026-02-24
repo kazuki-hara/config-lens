@@ -18,12 +18,17 @@ config-lens/
 │   ├── app.py                 # メインウィンドウ（DiffViewerApp）
 │   ├── menu.py                # ナビゲーションバー（NavigationFrame）
 │   ├── utils.py               # 汎用ユーティリティ関数
-│   └── compare/               # 比較機能モジュール群
+│   ├── compare/               # 比較機能モジュール群
+│   │   ├── __init__.py
+│   │   ├── logic.py           # 差分計算ロジック
+│   │   ├── view.py            # 比較ビュー UI
+│   │   ├── platforms.py       # プラットフォームマッピング（共通定義）
+│   │   ├── ignore.py          # Ignore パターン管理
+│   │   └── settings.py        # アプリ設定の永続化
+│   └── validate/              # 検証機能モジュール群
 │       ├── __init__.py
-│       ├── logic.py           # 差分計算ロジック
-│       ├── view.py            # 比較ビュー UI
-│       ├── ignore.py          # Ignore パターン管理
-│       └── settings.py        # アプリ設定の永続化
+│       ├── logic.py           # 検証ロジック
+│       └── view.py            # 検証ビュー UI
 │
 ├── tests/                     # テストコード
 │   ├── __init__.py
@@ -32,12 +37,20 @@ config-lens/
 │   │   ├── __init__.py
 │   │   ├── test_logic.py
 │   │   └── test_ignore.py
+│   ├── validate/
+│   │   ├── __init__.py
+│   │   └── test_logic.py
 │   └── fixtures/              # テスト用コンフィグファイル
 │       ├── source.txt
 │       ├── target.txt
 │       ├── demo_source.txt
 │       ├── demo_target.txt
-│       └── config/
+│       ├── config/
+│       ├── eBGP/              # eBGP 構成変更シナリオ
+│       │   ├── current.txt
+│       │   ├── input.txt
+│       │   └── after.txt
+│       └── vlan/              # VLAN 構成シナリオ
 │
 ├── assets/                    # アイコン等の静的リソース
 ├── docs/                      # ドキュメント（本ディレクトリ）
@@ -57,10 +70,11 @@ config-lens/
                   │
 ┌─────────────────▼───────────────────────────┐
 │  プレゼンテーション層（UI）                   │
-│  src/app.py       DiffViewerApp             │
-│  src/menu.py      NavigationFrame           │
-│  src/compare/view.py  CompareView           │
+│  src/app.py        DiffViewerApp            │
+│  src/menu.py       NavigationFrame          │
+│  src/compare/view.py   CompareView          │
 │  src/compare/ignore.py IgnorePatternDialog  │
+│  src/validate/view.py  ValidateView         │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
@@ -68,8 +82,11 @@ config-lens/
 │  src/compare/logic.py                       │
 │    HierarchicalDiffAnalyzer                 │
 │    TextAlignedDiffComparator                │
+│  src/validate/logic.py                      │
+│    validate()                               │
 │  src/compare/ignore.py                      │
 │    IgnorePatternManager                     │
+│  src/compare/platforms.py  プラットフォーム定義│
 │  src/utils.py   汎用ユーティリティ           │
 └─────────────────┬───────────────────────────┘
                   │
@@ -139,7 +156,7 @@ column 0 (weight=0, 固定幅)   column 1 (weight=1, 可変幅)
 
 階層構造の解析に必要な汎用関数を提供します。
 
-#### `calcurate_hierarcihical_path(config: list[str]) -> list[list[str]]`
+#### `calculate_hierarchical_path(config: list[str]) -> list[list[str]]`
 
 コンフィグの各行について、インデント量から階層パスを計算します。
 
@@ -214,7 +231,7 @@ config = [
 
 **アルゴリズム概要**
 
-1. 各行の階層パスを `calcurate_hierarcihical_path()` で計算し、`" > "` で結合したキーを生成する。  
+1. 各行の階層パスを `calculate_hierarchical_path()` で計算し、`" > "` で結合したキーを生成する。  
    例: `"interface GigabitEthernet0/0 > ip address 10.0.0.1 255.255.255.0"`
 2. `difflib.SequenceMatcher` でキーを比較し、`equal / replace / delete / insert` の opcodes を取得する。
 3. opcodes に従って空行（パディング）を挿入し、左右の行数を揃える。
@@ -222,7 +239,101 @@ config = [
 
 ---
 
-#### `src/compare/view.py` — 比較ビュー UI
+#### `src/compare/platforms.py` — プラットフォームマッピング
+
+`CompareView` と `ValidateView` が共有する GUI 選択肢名 → `Platform` 列挙型のマッピングを一元管理します。
+
+```python
+PLATFORM_MAP: dict[str, Platform] = {
+    "CISCO_IOS": Platform.CISCO_IOS,
+    "CISCO_NXOS (Not Supported)": Platform.CISCO_NXOS,
+    ...
+}
+```
+
+`"(Not Supported)"` サフィックスは将来実装予定のプラットフォームを示し、現時点では `CISCO_IOS` のみが実用レベルで動作します。
+
+---
+
+### `src/validate/` — 検証機能モジュール群
+
+Config Validator 機能に関するコード群です。ロジックと UI に分離されています。
+
+---
+
+#### `src/validate/logic.py` — 検証ロジック
+
+##### `ValidateResult`
+
+検証結果を保持するデータクラスです。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `running_lines` | `list[str]` | 整列後の running-config 表示用行リスト |
+| `expected_lines` | `list[str]` | 整列後の expected running-config 表示用行リスト |
+| `change_lines` | `list[str]` | 設定変更内容の生行リスト |
+| `running_types` | `list[str]` | running_lines の各行タイプ |
+| `expected_types` | `list[str]` | expected_lines の各行タイプ |
+| `change_types` | `list[str]` | change_lines の各行タイプ |
+| `change_to_running` | `dict[int, list[int]]` | change行インデックス → running列行番号リスト |
+| `change_to_expected` | `dict[int, list[int]]` | change行インデックス → expected列行番号リスト |
+| `is_valid` | `bool` | 説明できない差分がない場合 True |
+| `has_unapplied_change` | `bool` | 変更内容が差分に対応していない場合 True |
+
+**行タイプ一覧**
+
+| タイプ | 列 | 意味 |
+|---|---|---|
+| `equal` | running / expected | 両方に存在し差分なし |
+| `change_remove` | running | 設定変更内容で説明できる削除（⚠️ 黄色） |
+| `remove` | running | 説明できない削除（🔴 赤 = 検証エラー） |
+| `change_add` | expected | 設定変更内容で説明できる追加（⚠️ 黄色） |
+| `add` | expected | 説明できない追加（🟢 緑 = 検証エラー） |
+| `reorder` | running / expected | 記載順が異なる行 |
+| `empty` | running / expected | パディング用空行 |
+| `normal` | change | 差分に対応しない変更行 |
+| `change` | change | 差分に対応する変更行（⚠️ 黄色・クリック可） |
+| `unmatched` | change | 差分に対応しない変更行（グレー = 想定漏れ） |
+
+##### `validate(running_text, change_text, expected_text, platform)`
+
+3つのコンフィグテキストを検証するメイン関数です。
+
+**アルゴリズム概要**
+
+1. `TextAlignedDiffComparator.compare_and_align_with_structural_diff_info()` で running ↔ expected の構造的差分を計算する。
+2. `_build_change_key_maps()` で change の各行から `add_key_map` / `remove_key_map`（階層パスキー → 行インデックス）を構築する。
+3. 各差分行の階層パスキーをキーマップと照合し、一致すれば `change_remove` / `change_add`、不一致なら `remove` / `add` に分類する。
+4. `is_valid = "remove" not in running_types and "add" not in expected_types` で有効性を判定する。
+
+---
+
+#### `src/validate/view.py` — 検証ビュー UI
+
+##### `ValidateView`
+
+`ctk.CTkFrame` を継承した3列構成の検証ビューです。
+
+**列構成**
+
+| 列 | 内容 | ハイライト |
+|---|---|---|
+| 左 | 現在の running-config | change_remove: 黄、remove: 赤 |
+| 中央 | 設定変更内容 | change: 黄（クリック可）、unmatched: グレー |
+| 右 | 想定される running-config | change_add: 黄、add: 緑 |
+
+**主要なメソッド**
+
+| メソッド | 説明 |
+|---|---|
+| `_create_toolbar()` | ファイル選択×3・Platform・Validate ボタンを構築 |
+| `_create_main_area()` | 3列のテキストエリアを構築 |
+| `_on_validate()` | Validate ボタン押下時の検証実行 |
+| `_render_result()` | 検証結果をテキストエリアに反映 |
+| `_on_change_click()` | change 列クリック時の連動ハイライト |
+| `_apply_inline_char_diffs()` | 文字単位のインライン差分ハイライト |
+
+---
 
 `CompareView` クラスが比較機能の UI 全体を管理します。
 
@@ -328,12 +439,16 @@ Ignore 対象の正規表現パターンを管理するクラスです。
 ```
 DiffViewerApp (CTk)
 ├── NavigationFrame (CTkFrame)
-│   └── [CTkButton on_compare callback]
-└── CompareView (CTkFrame)
-    ├── IgnorePatternManager
-    │   └── AppSettings  ←→  settings.json
-    ├── IgnorePatternDialog (CTkToplevel)  [モーダル]
-    └── TextAlignedDiffComparator  [static methods]
-        └── HierarchicalDiffAnalyzer  [static methods]
-            └── hier_config (HConfig, get_hconfig)
+│   └── [CTkButton callbacks: compare / validate]
+├── CompareView (CTkFrame)
+│   ├── IgnorePatternManager
+│   │   └── AppSettings  ←→  settings.json
+│   ├── IgnorePatternDialog (CTkToplevel)  [モーダル]
+│   └── TextAlignedDiffComparator  [static methods]
+│       └── HierarchicalDiffAnalyzer  [static methods]
+│           └── hier_config (HConfig, get_hconfig)
+└── ValidateView (CTkFrame)
+    └── validate()  [function]
+        ├── TextAlignedDiffComparator  [再利用]
+        └── _build_change_key_maps()  [内部関数]
 ```

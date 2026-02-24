@@ -64,18 +64,18 @@ task run
 ### Docstring の例（Google 形式）
 
 ```python
-def calcurate_hierarcihical_path(config: list[str]) -> list[list[str]]:
+def calculate_hierarchical_path(config: list[str]) -> list[list[str]]:
     """階層構造を持つコンフィグの階層パスを計算する。
 
     Args:
-        config: コンフィグの行のリスト
+        config: コンフィグの行リスト
 
     Returns:
         各行の階層パスのリスト
 
     Example:
         >>> lines = ["interface Gi0/0", " no shutdown"]
-        >>> result = calcurate_hierarcihical_path(lines)
+        >>> result = calculate_hierarchical_path(lines)
         >>> result[1]
         ['interface Gi0/0', 'no shutdown']
     """
@@ -123,6 +123,7 @@ uv run pytest tests/compare/test_logic.py -v
 | `tests/test_utils.py` | `src/utils.py` のユーティリティ関数 |
 | `tests/compare/test_logic.py` | `src/compare/logic.py` の差分計算ロジック |
 | `tests/compare/test_ignore.py` | `src/compare/ignore.py` の Ignore パターン管理 |
+| `tests/validate/test_logic.py` | `src/validate/logic.py` の検証ロジック |
 
 ### フィクスチャファイル
 
@@ -136,6 +137,9 @@ uv run pytest tests/compare/test_logic.py -v
 | `demo_target.txt` | デモ用コンフィグ |
 | `config/source_config.txt` | 詳細なコンフィグサンプル |
 | `config/target_config.txt` | 詳細なコンフィグサンプル |
+| `eBGP/current.txt` | eBGP シナリオ: 変更前 running-config |
+| `eBGP/input.txt` | eBGP シナリオ: 設定変更内容 |
+| `eBGP/after.txt` | eBGP シナリオ: 想定される変更後 running-config |
 
 ### テスト作成の指針
 
