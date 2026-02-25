@@ -18,6 +18,7 @@ from src.compare.settings import AppSettings
 # 文字単位インライン差分の設定
 _INLINE_DIFF_THRESHOLD: float = 0.4  # ペアリングに必要な最低類似度
 _LINE_NUM_WIDTH: int = 5  # 行番号プレフィックスの文字数 ("   1 ")
+_SCROLL_SPEED: int = 3  # マウスホイール1ノッチあたりのスクロール行数
 
 # Platform 選択肢マッピング（platforms.py から共通インポート）
 _PLATFORM_MAP = PLATFORM_MAP
@@ -54,6 +55,11 @@ class CompareView(ctk.CTkFrame):
         self._active_src_row: int = -1
         self._active_tgt_row: int = -1
 
+        # ナビゲーション用ハイライト行リストと現在位置
+        self._highlighted_rows: list[int] = []
+        self._nav_index: int = -1
+        self._nav_current_row: int = -1  # 現在強調中の行番号（1ベース、-1=なし）
+
         # Ignore機能
         self._ignore_manager: IgnorePatternManager = IgnorePatternManager(
             settings
@@ -79,7 +85,7 @@ class CompareView(ctk.CTkFrame):
 
     def _create_widgets(self) -> None:
         """UIウィジェットを作成する。"""
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         # --- ツールバー ---
@@ -179,10 +185,37 @@ class CompareView(ctk.CTkFrame):
         )
         self._ignore_switch.grid(row=0, column=1, padx=(0, 8), pady=6)
 
+        # --- ナビゲーションバー ---
+        nav_bar = ctk.CTkFrame(self)
+        nav_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 4))
+
+        self._prev_btn = ctk.CTkButton(
+            nav_bar,
+            text="◀ Prev",
+            command=self._nav_prev,
+            width=80,
+            state="disabled",
+        )
+        self._prev_btn.pack(side="left", padx=(5, 2), pady=4)
+
+        self._nav_counter_label = ctk.CTkLabel(
+            nav_bar, text="- / -", width=100, anchor="center"
+        )
+        self._nav_counter_label.pack(side="left", padx=8)
+
+        self._next_btn = ctk.CTkButton(
+            nav_bar,
+            text="Next ▶",
+            command=self._nav_next,
+            width=80,
+            state="disabled",
+        )
+        self._next_btn.pack(side="left", padx=(2, 5), pady=4)
+
         # --- メインフレーム（テキスト表示エリア）---
         main_frame = ctk.CTkFrame(self)
         main_frame.grid(
-            row=1, column=0, sticky="nsew", padx=10, pady=(0, 10)
+            row=2, column=0, sticky="nsew", padx=10, pady=(0, 10)
         )
         main_frame.grid_rowconfigure(1, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
@@ -271,7 +304,7 @@ class CompareView(ctk.CTkFrame):
             anchor="w",
         )
         self.status_bar.grid(
-            row=2, column=0, sticky="ew", padx=10, pady=(0, 5)
+            row=3, column=0, sticky="ew", padx=10, pady=(0, 5)
         )
 
     def _configure_tags(self) -> None:
@@ -324,10 +357,19 @@ class CompareView(ctk.CTkFrame):
                 foreground="#5a5a5a",
             )
 
+        # ナビゲーション現在位置（Next/Prev で移動中の行）
+        for widget in (self.source_text, self.target_text):
+            widget.tag_configure(
+                "nav_current",
+                background="#ffffff",
+                foreground="#000000",
+            )
+
         # タグ優先順位:
-        #   reorder_active > delete_char/insert_char
+        #   nav_current > reorder_active > delete_char/insert_char
         #   > ignore > reorder > delete/insert > empty
         for widget in (self.source_text, self.target_text):
+            widget.tag_raise("nav_current")
             widget.tag_raise("reorder_active")
         self.source_text.tag_raise("delete_char")
         self.target_text.tag_raise("insert_char")
@@ -384,9 +426,9 @@ class CompareView(ctk.CTkFrame):
         Returns:
             "break" でデフォルトのスクロール動作を抑止する。
         """
-        scroll_units = int(-1 * (event.delta / 120))
+        scroll_units = int(-1 * (event.delta / 120)) * _SCROLL_SPEED
         if scroll_units == 0:
-            scroll_units = -1 if event.delta > 0 else 1
+            scroll_units = -_SCROLL_SPEED if event.delta > 0 else _SCROLL_SPEED
         widget = event.widget
         if isinstance(widget, tk.Text):
             widget.yview_scroll(scroll_units, "units")
@@ -405,9 +447,9 @@ class CompareView(ctk.CTkFrame):
         if not isinstance(widget, tk.Text):
             return "break"
         if event.num == 4:
-            widget.yview_scroll(-1, "units")
+            widget.yview_scroll(-_SCROLL_SPEED, "units")
         elif event.num == 5:
-            widget.yview_scroll(1, "units")
+            widget.yview_scroll(_SCROLL_SPEED, "units")
         return "break"
 
     def _open_source_file(self) -> None:
@@ -519,6 +561,55 @@ class CompareView(ctk.CTkFrame):
         )
         self._active_src_row = src_row
         self._active_tgt_row = tgt_row
+
+    def _nav_next(self) -> None:
+        """次のハイライト行へジャンプする。"""
+        if not self._highlighted_rows:
+            return
+        self._nav_index = min(
+            self._nav_index + 1, len(self._highlighted_rows) - 1
+        )
+        self._jump_to_nav_row()
+
+    def _nav_prev(self) -> None:
+        """前のハイライト行へジャンプする。"""
+        if not self._highlighted_rows:
+            return
+        self._nav_index = max(self._nav_index - 1, 0)
+        self._jump_to_nav_row()
+
+    def _jump_to_nav_row(self) -> None:
+        """現在のナビゲーションインデックスの行へ両テキストをスクロールする。"""
+        if not self._highlighted_rows or self._nav_index < 0:
+            return
+        row = self._highlighted_rows[self._nav_index]
+
+        # 前回の nav_current 強調を解除
+        if self._nav_current_row != -1:
+            for widget in (self.source_text, self.target_text):
+                widget.tag_remove(
+                    "nav_current",
+                    f"{self._nav_current_row}.0",
+                    f"{self._nav_current_row}.end",
+                )
+
+        # 現在行に nav_current タグを付与
+        for widget in (self.source_text, self.target_text):
+            widget.tag_add("nav_current", f"{row}.0", f"{row}.end")
+        self._nav_current_row = row
+
+        # source_text をスクロールすると _on_source_yscroll 経由で target も連動する
+        self.source_text.see(f"{row}.0")
+        self._update_nav_counter()
+
+    def _update_nav_counter(self) -> None:
+        """ナビゲーションカウンターラベルを更新する。"""
+        total = len(self._highlighted_rows)
+        if total == 0:
+            self._nav_counter_label.configure(text="差分なし")
+        else:
+            current = self._nav_index + 1 if self._nav_index >= 0 else 0
+            self._nav_counter_label.configure(text=f"{current} / {total} 差分")
 
     def _apply_char_diff(
         self,
@@ -708,6 +799,28 @@ class CompareView(ctk.CTkFrame):
                     f"（順番違いの行はクリックで対応行へジャンプ）"
                 )
             )
+            # ナビゲーション用ハイライト行リストを構築してリセット
+            highlighted: set[int] = set()
+            for i, (st, tt) in enumerate(
+                zip(src_types, tgt_types), start=1
+            ):
+                if st in ("delete", "insert", "reorder") or tt in (
+                    "delete",
+                    "insert",
+                    "reorder",
+                ):
+                    highlighted.add(i)
+            self._highlighted_rows = sorted(highlighted)
+            self._nav_index = -1
+            self._nav_current_row = -1
+            if self._highlighted_rows:
+                self._prev_btn.configure(state="normal")
+                self._next_btn.configure(state="normal")
+            else:
+                self._prev_btn.configure(state="disabled")
+                self._next_btn.configure(state="disabled")
+            self._update_nav_counter()
+
             self._has_compared = True
 
         except Exception as e:
