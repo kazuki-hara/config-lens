@@ -312,29 +312,29 @@ class CompareView(ctk.CTkFrame):
         # 削除された行（sourceのみに存在）
         self.source_text.tag_configure(
             "delete",
-            background="#4d1f1f",
-            foreground="#ff6b6b",
+            background="#5a1e1e",
+            foreground="#ffaaaa",
         )
 
         # 挿入された行（targetのみに存在）
         self.target_text.tag_configure(
             "insert",
-            background="#1f4d1f",
-            foreground="#6bff6b",
+            background="#1e5a24",
+            foreground="#aaffaa",
         )
 
         # 順番違い（両方に存在するが順番が異なる）
         for widget in (self.source_text, self.target_text):
             widget.tag_configure(
                 "reorder",
-                background="#4d3b1f",
-                foreground="#ffb347",
+                background="#4d4020",
+                foreground="#ffd966",
             )
             # クリック時の強調表示
             widget.tag_configure(
                 "reorder_active",
-                background="#7a5a1a",
-                foreground="#ffe680",
+                background="#7a6620",
+                foreground="#fff0a0",
             )
 
         # 空行（対応する行がない側のパディング）
@@ -342,11 +342,12 @@ class CompareView(ctk.CTkFrame):
         self.target_text.tag_configure("empty", background="#1a1a1a")
 
         # 文字単位差分強調（delete行内の変更文字 / insert行内の変更文字）
+        # foreground は白ではなく淡い色を使用して行全体の色調と調和させる
         self.source_text.tag_configure(
-            "delete_char", background="#8b0000", foreground="#ffffff"
+            "delete_char", background="#cc2200", foreground="#ffe8e8"
         )
         self.target_text.tag_configure(
-            "insert_char", background="#006400", foreground="#ffffff"
+            "insert_char", background="#00aa44", foreground="#e8ffe8"
         )
 
         # Ignore行（差分があっても検知対象外とした行）
@@ -358,11 +359,12 @@ class CompareView(ctk.CTkFrame):
             )
 
         # ナビゲーション現在位置（Next/Prev で移動中の行）
+        # 白反転ではなく青系を使用して他のハイライトと明確に区別する
         for widget in (self.source_text, self.target_text):
             widget.tag_configure(
                 "nav_current",
-                background="#ffffff",
-                foreground="#000000",
+                background="#1a52a0",
+                foreground="#ffffff",
             )
 
         # タグ優先順位:
