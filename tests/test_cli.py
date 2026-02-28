@@ -11,8 +11,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from src.cli import _apply_ignore, _build_parser, _format_html, _format_json, _format_text
 
 # テスト用のフィクスチャパス
