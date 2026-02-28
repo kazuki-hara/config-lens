@@ -15,13 +15,15 @@ config-lens/
 │
 ├── src/                       # アプリケーション本体
 │   ├── __init__.py
-│   ├── app.py                 # メインウィンドウ（DiffViewerApp）
-│   ├── menu.py                # ナビゲーションバー（NavigationFrame）
+│   ├── app.py                 # メインウィンドウ（DiffViewerApp + TkinterDnD）
+│   ├── cli.py                 # CLI 引数パーサー
 │   ├── utils.py               # 汎用ユーティリティ関数
 │   ├── compare/               # 比較機能モジュール群
 │   │   ├── __init__.py
 │   │   ├── logic.py           # 差分計算ロジック
-│   │   ├── view.py            # 比較ビュー UI
+│   │   ├── open_view.py       # 統合比較エントリ UI（OpenView / _PathBar / _DropZone）
+│   │   ├── result_window.py   # 比較結果ウィンドウ（CompareResultWindow）
+│   │   ├── folder_logic.py    # フォルダスキャン（FolderDiffScanner / FileDiffEntry）
 │   │   ├── platforms.py       # プラットフォームマッピング（共通定義）
 │   │   ├── ignore.py          # Ignore パターン管理
 │   │   └── settings.py        # アプリ設定の永続化
@@ -33,10 +35,12 @@ config-lens/
 ├── tests/                     # テストコード
 │   ├── __init__.py
 │   ├── test_utils.py
+│   ├── test_cli.py
 │   ├── compare/
 │   │   ├── __init__.py
 │   │   ├── test_logic.py
-│   │   └── test_ignore.py
+│   │   ├── test_ignore.py
+│   │   └── test_folder_logic.py
 │   ├── validate/
 │   │   ├── __init__.py
 │   │   └── test_logic.py
@@ -65,15 +69,18 @@ config-lens/
 ```
 ┌─────────────────────────────────────────────┐
 │  エントリーポイント                           │
-│  main.py → src/app.py::main()               │
+│  main.py → src/cli.py → src/app.py::main()  │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
 │  プレゼンテーション層（UI）                   │
-│  src/app.py        DiffViewerApp            │
-│  src/menu.py       NavigationFrame          │
-│  src/compare/view.py   CompareView          │
-│  src/compare/ignore.py IgnorePatternDialog  │
+│  src/app.py            DiffViewerApp        │
+│  src/compare/          compare/             │
+│    open_view.py          OpenView           │
+│                          _PathBar           │
+│                          _DropZone          │
+│    result_window.py      CompareResultWindow│
+│    ignore.py             IgnorePatternDialog│
 │  src/validate/view.py  ValidateView         │
 └─────────────────┬───────────────────────────┘
                   │
@@ -82,6 +89,9 @@ config-lens/
 │  src/compare/logic.py                       │
 │    HierarchicalDiffAnalyzer                 │
 │    TextAlignedDiffComparator                │
+│  src/compare/folder_logic.py                │
+│    FolderDiffScanner                        │
+│    FileDiffEntry                            │
 │  src/validate/logic.py                      │
 │    validate()                               │
 │  src/compare/ignore.py                      │
@@ -116,39 +126,86 @@ if __name__ == "__main__":
 
 ### `src/app.py` — `DiffViewerApp`
 
-`customtkinter.CTk` を継承したメインウィンドウクラスです。
+`customtkinter.CTk` と `TkinterDnD.DnDWrapper` を多重継承したメインウィンドウクラスです。
 
 | 要素 | 説明 |
 |---|---|
 | `_settings: AppSettings` | アプリ全体で共有する設定オブジェクト |
-| `_nav_frame: NavigationFrame` | 左列のナビゲーションバー |
-| `_compare_view: CompareView` | 右列の比較ビュー |
-| `_show_compare_view()` | 比較ビューを前面に表示（将来の多ビュー切替に備えた設計） |
+| `_open_view: OpenView` | 比較エントリポイントビュー（唯一のビュー） |
 
-ウィンドウの初期サイズは `1400×800` px で、外観は `dark` モード、カラーテーマは `dark-blue` です。
+ウィンドウの初期サイズは `1400×800` px で、外観は `dark` モード、カラーテーマは `dark-blue` です。  
+DnD（ドラッグ&ドロップ）は`TkinterDnD.DnDWrapper`によりOSレベルで対応しています。
 
 **ウィジェット配置（grid）**
 
 ```
-column 0 (weight=0, 固定幅)   column 1 (weight=1, 可変幅)
-┌────────────────────┬─────────────────────────────────┐
-│  NavigationFrame   │  CompareView                    │
-│   (row=0, col=0)   │   (row=0, col=1)                │
-└────────────────────┴─────────────────────────────────┘
+column 0 (weight=1, 可変幅)
+┌──────────────────────────────────────┐
+│  OpenView                            │
+│   (row=0, col=0)                     │
+└──────────────────────────────────────┘
 ```
 
 ---
 
-### `src/menu.py` — `NavigationFrame`
+### `src/cli.py` — CLI パーサー
 
-アプリ左側に固定表示される縦型ナビゲーションバーです。
+コマンドライン引数を解析し、ファイルパスをあらかじめ指定して起動するためのモジュールです。
 
-| 要素 | 説明 |
+---
+
+### `src/compare/open_view.py` — `OpenView`・`_PathBar`・`_DropZone`
+
+v0.3.0 で新設した WinMerge ライクな統合 UI モジュールです。
+
+#### `OpenView(ctk.CTkFrame)`
+
+アプリの唯一のビューであり、ファイル比較／フォルダ比較の両モードを管理します。
+
+| 行 | 内容 | モード |
+|---|---|---|
+| row=0 | ツールバー（Platform / Compare / リセット） | 共通 |
+| row=1 | `_PathBar`（パスバー、常時表示） | 共通 |
+| row=2 | ドロップゾーン（左右 2 列） | ファイルモード |
+| row=2 | 列ヘッダー（weight=0） | フォルダモード |
+| row=3 | スクロール一覧 | フォルダモード |
+| row=4 | フリーペアバー | フォルダモード |
+| row=5 | ステータスバー | 共通 |
+
+| メソッド | 説明 |
 |---|---|
-| `_on_compare: Callable[[], None]` | 比較ボタン押下時のコールバック |
-| `_create_widgets()` | ウィジェットを構築する内部メソッド |
+| `_show_drop_mode()` | ファイル選択モードに切り替え |
+| `_show_folder_mode()` | フォルダ比較モードに切り替え |
+| `_run_folder_compare(left, right)` | フォルダをスキャンしてファイル一覧を表示 |
+| `_on_free_compare()` | フリーペア選択後に差分比較ウィンドウを開く |
 
-現在は「Text Diff Viewer」ボタン1つのみです。新しい機能を追加する場合はここにボタンを追加します。
+#### `_PathBar(ctk.CTkFrame)`
+
+`grid + uniform="h"` により左右を厳密に 50/50 分割し、選択中パスを表示します。
+
+#### `_DropZone(ctk.CTkFrame)`
+
+DnD イベント（`<<DragEnter>>`・`<<DragLeave>>`・`<<Drop>>`）を処理し、ドラッグ中は青くハイライトします。
+
+---
+
+### `src/compare/result_window.py` — `CompareResultWindow`
+
+比較結果を表示するポップアップウィンドウです。同一ファイルペアに対しては重複ウィンドウを開かない制御が組み込まれています。
+
+---
+
+### `src/compare/folder_logic.py` — `FolderDiffScanner`・`FileDiffEntry`
+
+フォルダをスキャンして配下ファイルの差分情報を返すモジュールです。
+
+| クラス/型 | 説明 |
+|---|---|
+| `FolderDiffScanner(walk_depth=1)` | 指定深さまでフォルダを走査 |
+| `scan(left, right) -> list[FileDiffEntry]` | 左右フォルダを比較してエントリリストを返す |
+| `FileDiffEntry` | `filename`, `status`, `left_path`, `right_path` を持つデータクラス |
+
+`status` のとりうる値：`"added"` / `"removed"` / `"changed"` / `"unchanged"`
 
 ---
 
