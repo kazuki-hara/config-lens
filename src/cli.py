@@ -306,7 +306,7 @@ def cli_main() -> None:
             _src_keys,
             _tgt_keys,
         ) = TextAlignedDiffComparator.compare_and_align_with_structural_diff_info(
-            src_text, tgt_text, platform
+            src_text, tgt_text, platform, normalize=True
         )
 
         _apply_ignore(

@@ -12,6 +12,7 @@ import customtkinter as ctk
 
 from src.compare.ignore import IgnorePatternDialog, IgnorePatternManager
 from src.compare.logic import TextAlignedDiffComparator
+from src.compare.normalizer import VLAN_DIFF_ANNOTATION_MARKER
 from src.compare.platforms import PLATFORM_MAP
 from src.compare.settings import AppSettings
 
@@ -261,6 +262,12 @@ class CompareResultWindow(ctk.CTkToplevel):
             )
         self.source_text.tag_configure("empty", background="#1a1a1a")
         self.target_text.tag_configure("empty", background="#1a1a1a")
+        for widget in (self.source_text, self.target_text):
+            widget.tag_configure(
+                "vlan_annotation",
+                background="#2a2a2a",
+                foreground="#888888",
+            )
         self.source_text.tag_configure(
             "delete_char", background="#cc2200", foreground="#ffe8e8"
         )
@@ -544,7 +551,7 @@ class CompareResultWindow(ctk.CTkToplevel):
             ) = (
                 TextAlignedDiffComparator
                 .compare_and_align_with_structural_diff_info(
-                    src_text, tgt_text, platform
+                    src_text, tgt_text, platform, normalize=True
                 )
             )
 
@@ -593,6 +600,16 @@ class CompareResultWindow(ctk.CTkToplevel):
                 line_num = f"{i:4d} "
                 self.source_text.insert("end", line_num + src_line + "\n")
                 self.target_text.insert("end", line_num + tgt_line + "\n")
+                # VLANアノテーション行はグレーで上書き表示
+                active_line = src_line if src_line else tgt_line
+                if VLAN_DIFF_ANNOTATION_MARKER in active_line:
+                    self.source_text.tag_add(
+                        "vlan_annotation", f"{i}.0", f"{i}.end"
+                    )
+                    self.target_text.tag_add(
+                        "vlan_annotation", f"{i}.0", f"{i}.end"
+                    )
+                    continue
                 if src_type != "equal":
                     self.source_text.tag_add(
                         src_type, f"{i}.0", f"{i}.end"
@@ -664,9 +681,12 @@ class CompareResultWindow(ctk.CTkToplevel):
 
             # ナビゲーション構築
             highlighted: set[int] = set()
-            for i, (st, tt) in enumerate(
-                zip(src_types, tgt_types), start=1
+            for i, (st, tt, sl, tl) in enumerate(
+                zip(src_types, tgt_types, source_lines, target_lines), start=1
             ):
+                active = sl if sl else tl
+                if VLAN_DIFF_ANNOTATION_MARKER in active:
+                    continue  # アノテーション行はナビゲーション対象外
                 if st in ("delete", "insert", "reorder") or tt in (
                     "delete",
                     "insert",
