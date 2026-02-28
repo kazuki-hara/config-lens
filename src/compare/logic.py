@@ -7,6 +7,7 @@ import difflib
 
 from hier_config import HConfig, Platform, get_hconfig
 
+from src.compare.normalizer import normalize_vlan_trunk_pair
 from src.utils import (
     calculate_hierarchical_path,
     remove_plus_minus_from_diff_line,
@@ -215,7 +216,9 @@ class TextAlignedDiffComparator:
 
     @staticmethod
     def compare_and_align(
-        source_text: str, target_text: str
+        source_text: str,
+        target_text: str,
+        normalize: bool = False,
     ) -> tuple[list[str], list[str]]:
         """2つのテキストを比較し、高さを揃えた行のリストを返す。
 
@@ -225,6 +228,8 @@ class TextAlignedDiffComparator:
         Args:
             source_text: 比較元のテキスト
             target_text: 比較先のテキスト
+            normalize: ``True`` の場合、比較前に L2SW の
+                ``switchport trunk allowed vlan`` 行を正規化する。
 
         Returns:
             高さを揃えた ``(source側行リスト, target側行リスト)``。
@@ -240,6 +245,10 @@ class TextAlignedDiffComparator:
             >>> len(source_aligned) == len(target_aligned)
             True
         """
+        if normalize:
+            source_text, target_text = normalize_vlan_trunk_pair(
+                source_text, target_text
+            )
         source_lines = source_text.splitlines()
         target_lines = target_text.splitlines()
         source_keys = TextAlignedDiffComparator._build_hierarchical_keys(
@@ -257,19 +266,27 @@ class TextAlignedDiffComparator:
 
     @staticmethod
     def compare_and_align_with_diff_info(
-        source_text: str, target_text: str
+        source_text: str,
+        target_text: str,
+        normalize: bool = False,
     ) -> tuple[list[str], list[str], list[str]]:
         """2つのテキストを比較し、高さを揃えた行と差分情報を返す。
 
         Args:
             source_text: 比較元のテキスト
             target_text: 比較先のテキスト
+            normalize: ``True`` の場合、比較前に L2SW の
+                ``switchport trunk allowed vlan`` 行を正規化する。
 
         Returns:
             タプル ``(source行リスト, target行リスト, 差分タイプリスト)``。
             差分タイプは ``"equal"``, ``"delete"``, ``"insert"``,
             ``"replace"`` のいずれか。
         """
+        if normalize:
+            source_text, target_text = normalize_vlan_trunk_pair(
+                source_text, target_text
+            )
         source_lines = source_text.splitlines()
         target_lines = target_text.splitlines()
         source_keys = TextAlignedDiffComparator._build_hierarchical_keys(
@@ -287,6 +304,7 @@ class TextAlignedDiffComparator:
         source_text: str,
         target_text: str,
         platform: Platform,
+        normalize: bool = False,
     ) -> tuple[
         list[str],
         list[str],
@@ -312,12 +330,18 @@ class TextAlignedDiffComparator:
             source_text: 比較元のテキスト
             target_text: 比較先のテキスト
             platform: コンフィグのプラットフォーム
+            normalize: ``True`` の場合、比較前に L2SW の
+                ``switchport trunk allowed vlan`` 行を正規化する。
 
         Returns:
             タプル ``(source行リスト, target行リスト,
             source差分タイプリスト, target差分タイプリスト,
             source整列後キーリスト, target整列後キーリスト)``。
         """
+        if normalize:
+            source_text, target_text = normalize_vlan_trunk_pair(
+                source_text, target_text
+            )
         source_lines = source_text.splitlines()
         target_lines = target_text.splitlines()
         source_keys = TextAlignedDiffComparator._build_hierarchical_keys(

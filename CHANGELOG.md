@@ -5,6 +5,26 @@
 
 ---
 
+## [0.4.0] - 2026-02-28
+
+### 追加
+- **L2SW VLAN トランク正規化機能**（`src/compare/normalizer.py`）— `switchport trunk allowed vlan add` で VLAN ID が複数行に跨るコンフィグを、VLAN ID をレンジ表記にまとめた単一行に正規化してから差分比較を行う
+- **VLAN 差分アノテーション行**（`normalize_vlan_trunk_pair`）— 同インターフェースの VLAN 構成に差分がある場合、VLANトランク行の直後に `! [vlan diff]  -delete:96  +add:161,169` 形式の情報行を両側に挿入。差分比較エンジンが `equal` と認識するため左右同行にグレーで表示される
+- `expand_vlan_ids()` — カンマ区切り・ハイフン範囲指定の VLAN ID 文字列を整数セットに展開
+- `vlan_ids_to_ranges()` — 整数セットを連続 ID をレンジ化したコンパクト文字列に変換（例: `{1,2,3,10}` → `"1-3,10"`）
+- `compare_and_align`・`compare_and_align_with_diff_info`・`compare_and_align_with_structural_diff_info` に `normalize: bool = False` パラメータを追加
+
+### 変更
+- GUI（`result_window.py`）と CLI（`cli.py`）のファイル比較で常時 `normalize=True` を設定し、L2SW コンフィグの VLAN 差分を自動的に正確検知するように変更
+- アノテーション行（`! [vlan diff]`）は `vlan_annotation` タグでグレー着色、ナビゲーション対象外
+
+### 内部改善
+- `normalize_vlan_trunk_config` をインターフェースブロック単位で処理するように再設計。`switchport mode trunk` が init 行と add 行の間に挟まれた実機コンフィグでも正しく動作
+- テスト追加：`tests/compare/test_normalizer.py`（36 件、全 161 件通過）
+- テストフィクスチャ更新：`tests/fixtures/vlan/l2sw_source.txt`・`l2sw_target.txt` をレンジ表記の実機相当コンフィグに更新
+
+---
+
 ## [0.3.0] - 2026-02-28
 
 ### 追加
