@@ -50,7 +50,7 @@ jobs:
   # ──────────────────────────────────────────────
   build-mac:
     name: Build (macOS)
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: test-lint
     # push to main のみビルドを実行（PR ではスキップ）
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -76,7 +76,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --extra ai
 
       - name: Generate icon (macOS)
         run: |
