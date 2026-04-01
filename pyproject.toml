@@ -12,6 +12,9 @@ dependencies = [
     "tkinterdnd2>=0.4.2",
 ]
 
+[project.optional-dependencies]
+ai = ["apple-fm-sdk>=0.1.1"]
+
 [dependency-groups]
 dev = [
     "pillow>=12.1.1",
