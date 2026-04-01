@@ -5,6 +5,29 @@
 
 ---
 
+## [0.5.0] - 2026-03-31
+
+### 追加
+- **AI レビュー機能**（`src/compare/ai_review.py`）— Apple Foundation Models SDK（`apple_fm_sdk`）を使用し、コンフィグ差分を自然な日本語で説明する AI レビューを提供
+  - `ConfigDiffReviewer.is_available()` — Apple Intelligence の利用可否をチェック
+  - `build_hierarchical_diff_text()` — `HierarchicalDiffAnalyzer` と `_correlate_changes` を組み合わせ、差分を **MODIFIED / ADDED / REMOVED** の 3 セクションで整形
+  - `_correlate_changes()` — 同じ親ブロック・同じコマンドキーワード（先頭 2 語）を持つ削除＋追加ペアを「変更」として相関付ける。例: 同インタフェース下の `ip address` 書き換えを削除+追加ではなく MODIFIED として扱う
+  - `run_review_in_background()` — Tkinter メインスレッドと切り離すためのバックグラウンドスレッド実行ヘルパー
+- **AI レビューパネル**（`src/compare/result_window.py`）— 比較結果ウィンドウに折りたたみ式の AI レビューエリアを追加。「AI レビュー」ボタン押下で差分説明を表示
+- **Markdown レンダリング**（`_render_markdown_to_text`）— AI の出力（`##` / `###` 見出し、`-` 箇条書き、`**太字**`）を `tk.Text` タグでネイティブ描画
+- `apple-fm-sdk>=0.1.1` を依存関係に追加
+
+### 変更
+- AI への system prompt・ユーザープロンプトを英語に統一（Apple Intelligence のロケール制約に対応）
+- `UnsupportedLanguageOrLocaleError` を捕捉し、日本語のガイドメッセージを表示するエラーハンドリングを追加
+
+### 内部改善
+- テスト追加：`tests/compare/test_ai_review.py`（22 件、全 183 件通過）
+  - `TestBuildHierarchicalDiffText` — MODIFIED / ADDED / REMOVED セクション検証、差分なし時の `(no diff)` 検証
+  - `TestCorrelateChanges` — 相関付けロジックの単体テスト（同親・異親・異キーワード・空入力・追加のみ）
+
+---
+
 ## [0.4.0] - 2026-02-28
 
 ### 追加
