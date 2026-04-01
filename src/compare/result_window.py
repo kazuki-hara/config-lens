@@ -5,14 +5,11 @@ Toplevel ウィンドウを提供する。
 """
 
 import difflib
-import re
 import tkinter as tk
-import tkinter.messagebox
 from pathlib import Path
 
 import customtkinter as ctk
 
-from src.compare.ai_review import ReviewResult, run_review_in_background
 from src.compare.ignore import IgnorePatternDialog, IgnorePatternManager
 from src.compare.logic import TextAlignedDiffComparator
 from src.compare.normalizer import VLAN_DIFF_ANNOTATION_MARKER
@@ -25,75 +22,6 @@ _LINE_NUM_WIDTH: int = 5
 _SCROLL_SPEED: int = 3
 
 _PLATFORM_MAP = PLATFORM_MAP
-
-
-def _insert_inline_markup(
-    widget: tk.Text,
-    text: str,
-    *extra_tags: str,
-) -> None:
-    """インライン Markdown（**bold**）を処理して tk.Text に挿入する。
-
-    Args:
-        widget: 挿入対象の tk.Text ウィジェット
-        text: 挿入するテキスト（インライン記法を含む可能性がある）
-        *extra_tags: 追加で適用するタグ
-    """
-    parts = re.split(r"(\*\*[^*\n]+\*\*)", text)
-    for part in parts:
-        if part.startswith("**") and part.endswith("**") and len(part) > 4:
-            inner = part[2:-2]
-            widget.insert("end", inner, ("md_bold", *extra_tags))
-        else:
-            if extra_tags:
-                widget.insert("end", part, extra_tags)
-            else:
-                widget.insert("end", part)
-
-
-def _render_markdown_to_text(
-    widget: tk.Text,
-    markdown: str,
-) -> None:
-    """Markdown テキストを tk.Text ウィジェットにレンダリングする。
-
-    対応する Markdown 記法:
-    - ``## テキスト`` : H2 見出し
-    - ``### テキスト`` : H3 見出し
-    - ``- テキスト`` : 箇条書き
-    - ``**テキスト**`` : 太字（インライン）
-
-    Args:
-        widget: レンダリング対象の tk.Text ウィジェット
-        markdown: レンダリングする Markdown テキスト
-    """
-    for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-
-        if line.startswith("## "):
-            content = line[3:]
-            widget.insert("end", "\n", "")
-            widget.insert("end", content + "\n", "md_h2")
-
-        elif line.startswith("### "):
-            content = line[4:]
-            widget.insert("end", content + "\n", "md_h3")
-
-        elif line.startswith("# "):
-            content = line[2:]
-            widget.insert("end", "\n", "")
-            widget.insert("end", content + "\n", "md_h2")
-
-        elif re.match(r"^[-*] ", line):
-            content = line[2:]
-            widget.insert("end", "  • ", "md_bullet_marker")
-            _insert_inline_markup(widget, content + "\n")
-
-        elif not line:
-            widget.insert("end", "\n")
-
-        else:
-            _insert_inline_markup(widget, line + "\n")
 
 
 class CompareResultWindow(ctk.CTkToplevel):
@@ -150,9 +78,6 @@ class CompareResultWindow(ctk.CTkToplevel):
         self._ignore_dialog: "IgnorePatternDialog | None" = None
 
         self._syncing_scroll: bool = False
-        self._src_raw_text: str = ""
-        self._tgt_raw_text: str = ""
-        self._review_running: bool = False
 
         self._create_widgets()
         self._ignore_enabled_var.trace_add("write", self._on_ignore_toggle)
@@ -215,15 +140,6 @@ class CompareResultWindow(ctk.CTkToplevel):
             offvalue=False,
         )
         self._ignore_switch.pack(side="left", padx=(0, 8), pady=4)
-
-        # AI Review ボタン
-        self._ai_review_btn = ctk.CTkButton(
-            nav_bar,
-            text="✨ AI Review",
-            command=self._on_ai_review_click,
-            width=110,
-        )
-        self._ai_review_btn.pack(side="right", padx=(5, 8), pady=4)
 
         # --- メインフレーム（テキスト表示エリア）---
         main_frame = ctk.CTkFrame(self)
@@ -319,61 +235,6 @@ class CompareResultWindow(ctk.CTkToplevel):
         )
         self.status_bar.grid(
             row=2, column=0, sticky="ew", padx=10, pady=(0, 5)
-        )
-
-        # AI レビューパネル（デフォルト非表示）
-        self._ai_review_panel = ctk.CTkFrame(self)
-        self._ai_review_panel_visible = False
-
-        panel_header = ctk.CTkFrame(self._ai_review_panel)
-        panel_header.pack(fill="x", padx=5, pady=(5, 0))
-
-        self._ai_review_title = ctk.CTkLabel(
-            panel_header,
-            text="AI Review",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            anchor="w",
-        )
-        self._ai_review_title.pack(side="left", padx=5)
-
-        ctk.CTkButton(
-            panel_header,
-            text="✕",
-            width=28,
-            command=self._hide_ai_review_panel,
-        ).pack(side="right", padx=5)
-
-        self._ai_review_text = tk.Text(
-            self._ai_review_panel,
-            wrap="word",
-            bg="#1e1e2e",
-            fg="#cdd6f4",
-            font=("Helvetica", 11),
-            height=8,
-            state="disabled",
-            relief="flat",
-            borderwidth=0,
-        )
-        self._ai_review_text.pack(
-            fill="both", expand=True, padx=5, pady=5
-        )
-        self._ai_review_text.tag_configure(
-            "md_h2",
-            font=("Helvetica", 12, "bold"),
-            foreground="#89b4fa",
-        )
-        self._ai_review_text.tag_configure(
-            "md_h3",
-            font=("Helvetica", 11, "bold"),
-            foreground="#74c7ec",
-        )
-        self._ai_review_text.tag_configure(
-            "md_bold",
-            font=("Helvetica", 11, "bold"),
-        )
-        self._ai_review_text.tag_configure(
-            "md_bullet_marker",
-            foreground="#a6e3a1",
         )
 
     def _configure_tags(self) -> None:
@@ -843,119 +704,5 @@ class CompareResultWindow(ctk.CTkToplevel):
                 self._next_btn.configure(state="disabled")
             self._update_nav_counter()
 
-            # AI レビュー用にコンフィグテキストを保存
-            self._src_raw_text = src_text
-            self._tgt_raw_text = tgt_text
-
         except Exception as e:
             self.status_bar.configure(text=f"エラー: {e!s}")
-
-    # ------------------------------------------------------------------
-    # AI Review
-    # ------------------------------------------------------------------
-
-    def _on_ai_review_click(self) -> None:
-        """AI Review ボタンクリック時の処理。"""
-        from src.compare.ai_review import ConfigDiffReviewer  # noqa: PLC0415
-
-        if self._review_running:
-            return
-
-        available, reason = ConfigDiffReviewer.is_available()
-        if not available:
-            tkinter.messagebox.showerror(
-                "AI Review 利用不可",
-                reason,
-                parent=self,
-            )
-            return
-
-        if not self._src_raw_text and not self._tgt_raw_text:
-            tkinter.messagebox.showinfo(
-                "AI Review",
-                "比較対象のファイルがありません。",
-                parent=self,
-            )
-            return
-
-        self._review_running = True
-        self._ai_review_btn.configure(
-            state="disabled", text="レビュー中..."
-        )
-        self._show_ai_review_panel(loading=True)
-
-        def _on_success(r: ReviewResult) -> None:
-            self.after(0, lambda: self._on_review_success(r))
-
-        def _on_error(e: str) -> None:
-            self.after(0, lambda: self._on_review_error(e))
-
-        run_review_in_background(
-            source_text=self._src_raw_text,
-            target_text=self._tgt_raw_text,
-            platform_name=self._platform_name,
-            on_success=_on_success,
-            on_error=_on_error,
-        )
-
-    def _on_review_success(self, result: ReviewResult) -> None:
-        """AI レビュー成功時の UI 更新。
-
-        Args:
-            result: AI レビュー結果
-        """
-        self._review_running = False
-        self._ai_review_btn.configure(
-            state="normal", text="✨ AI Review"
-        )
-        self._show_ai_review_panel(loading=False, result=result)
-
-    def _on_review_error(self, message: str) -> None:
-        """AI レビューエラー時の UI 更新。
-
-        Args:
-            message: エラーメッセージ
-        """
-        self._review_running = False
-        self._ai_review_btn.configure(
-            state="normal", text="✨ AI Review"
-        )
-        self._hide_ai_review_panel()
-        tkinter.messagebox.showerror(
-            "AI Review エラー", message, parent=self
-        )
-
-    def _show_ai_review_panel(
-        self,
-        loading: bool = False,
-        result: ReviewResult | None = None,
-    ) -> None:
-        """AI レビューパネルを表示する。
-
-        Args:
-            loading: True のときローディング状態で表示
-            result: 表示するレビュー結果（loading=False 時に使用）
-        """
-        self._ai_review_text.config(state="normal")
-        self._ai_review_text.delete("1.0", "end")
-
-        if loading:
-            self._ai_review_title.configure(text="AI Review - レビュー中...")
-            self._ai_review_text.insert("end", "AIがコンフィグ差分を分析中です...")
-        elif result is not None:
-            self._ai_review_title.configure(text="AI Review")
-            _render_markdown_to_text(self._ai_review_text, result.raw_markdown)
-
-        self._ai_review_text.config(state="disabled")
-
-        if not self._ai_review_panel_visible:
-            self._ai_review_panel.grid(
-                row=3, column=0, sticky="ew", padx=10, pady=(0, 5)
-            )
-            self._ai_review_panel_visible = True
-
-    def _hide_ai_review_panel(self) -> None:
-        """AI レビューパネルを非表示にする。"""
-        if self._ai_review_panel_visible:
-            self._ai_review_panel.grid_remove()
-            self._ai_review_panel_visible = False
